@@ -2,3 +2,4 @@
     "python.defaultInterpreterPath": "./venv/bin/python",
     "python.analysis.extraPaths": ["./backend"]
 }
+
