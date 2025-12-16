@@ -12,5 +12,6 @@ def test_view(request):
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/users/', include('users.urls')),
+    path('api/', include('inventory.urls')),
     path('api/test/', test_view),
 ]

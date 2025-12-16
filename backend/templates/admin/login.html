@@ -1,0 +1,144 @@
+{% extends "admin/login.html" %}
+{% load static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    @font-face {
+        font-family: 'Gelica';
+        src: url('{% static "fonts/Fontspring-DEMO-gelica-regular.otf" %}') format('opentype');
+    }
+
+    body.login {
+        background-color: #F7F4EE; /* Warm Off-White */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+    }
+
+    /* Container */
+    #container {
+        background: #FFFFFF;
+        color: #353D46;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        padding: 40px;
+        width: 100%;
+        max-width: 400px;
+        border: none;
+    }
+
+    /* Header */
+    #header {
+        background: transparent;
+        color: #353D46;
+        padding: 0;
+        margin-bottom: 30px;
+        box-shadow: none;
+        text-align: center;
+        width: 100%;
+    }
+
+    #header #branding h1 {
+        font-family: 'Gelica', serif;
+        font-size: 2rem;
+        color: #000000;
+        margin: 0;
+    }
+
+    #content-main {
+        float: none;
+        width: 100%;
+    }
+
+    /* Form Elements */
+    .form-row {
+        border-bottom: none;
+        padding: 10px 0;
+    }
+
+    .form-row label {
+        font-family: 'Poppins', sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-size: 0.8rem;
+        color: #353D46;
+        padding-right: 0.5em;
+        line-height: 2em;
+        font-weight: bold;
+    }
+
+    .form-row input {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-family: 'Poppins', sans-serif;
+        box-sizing: border-box;
+    }
+
+    .form-row input:focus {
+        border-color: #8E1F0B; /* Rust Red */
+        outline: none;
+    }
+
+    /* Button */
+    .submit-row {
+        background: none;
+        padding: 20px 0 0 0;
+        text-align: center;
+    }
+
+    .submit-row input[type="submit"] {
+        background: #8E1F0B; /* Rust Red */
+        color: #FFFFFF;
+        border: none;
+        border-radius: 4px;
+        padding: 12px 24px;
+        font-family: 'Poppins', sans-serif;
+        font-weight: bold;
+        cursor: pointer;
+        transition: background 0.3s ease;
+        text-transform: uppercase;
+        width: 100%;
+        height: auto;
+    }
+
+    .submit-row input[type="submit"]:hover {
+        background: #9B784C; /* Gold/Bronze */
+    }
+
+    /* Logo Placeholder */
+    .logo-container {
+        text-align: center;
+        margin-bottom: 20px;
+    }
+
+    .logo-svg {
+        width: 80px;
+        height: 80px;
+        fill: #8E1F0B;
+    }
+
+    /* Errors */
+    .errornote {
+        background: #ffebeb;
+        border: 1px solid #8E1F0B;
+        color: #8E1F0B;
+        border-radius: 4px;
+    }
+
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+{% endblock %}
+
+{% block branding %}
+<div class="logo-container">
+    <!-- Simple Placeholder SVG Logo -->
+    <svg class="logo-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2L2 7l10 5 10-5-10-5zm0 9l2.5-1.25L12 8.5l-2.5 1.25L12 11zm0 2.5l-5-2.5-5 2.5L12 22l10-8.5-5-2.5-5 2.5z"/>
+    </svg>
+</div>
+<h1 id="site-name"><a href="{% url 'admin:index' %}">Brand Name</a></h1>
+{% endblock %}

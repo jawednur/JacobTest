@@ -1,0 +1,63 @@
+Watching for file changes with StatReloader
+[14/Dec/2025 07:08:07] "HEAD /admin/login/ HTTP/1.1" 200 0
+[14/Dec/2025 07:08:15] "POST /api/users/token/ HTTP/1.1" 200 489
+[14/Dec/2025 07:08:24] "GET /api/dashboard/stats/ HTTP/1.1" 200 93
+[14/Dec/2025 07:08:35] "POST /api/items/ HTTP/1.1" 201 110
+[14/Dec/2025 07:08:45] "GET /api/items/ HTTP/1.1" 200 112
+[14/Dec/2025 07:08:54] "GET /api/users/profile/ HTTP/1.1" 200 117
+[14/Dec/2025 07:10:39] "OPTIONS /api/users/token/ HTTP/1.1" 200 0
+[14/Dec/2025 07:10:40] "POST /api/users/token/ HTTP/1.1" 200 489
+[14/Dec/2025 07:10:40] "OPTIONS /api/users/profile/ HTTP/1.1" 200 0
+[14/Dec/2025 07:10:40] "OPTIONS /api/dashboard/stats/ HTTP/1.1" 200 0
+[14/Dec/2025 07:10:40] "OPTIONS /api/dashboard/stats/ HTTP/1.1" 200 0
+[14/Dec/2025 07:10:40] "GET /api/users/profile/ HTTP/1.1" 200 117
+[14/Dec/2025 07:10:40] "GET /api/dashboard/stats/ HTTP/1.1" 200 93
+[14/Dec/2025 07:10:40] "GET /api/dashboard/stats/ HTTP/1.1" 200 93
+[14/Dec/2025 07:10:40] "OPTIONS /api/items/ HTTP/1.1" 200 0
+[14/Dec/2025 07:10:40] "OPTIONS /api/items/ HTTP/1.1" 200 0
+[14/Dec/2025 07:10:40] "GET /api/items/ HTTP/1.1" 200 112
+[14/Dec/2025 07:10:40] "GET /api/items/ HTTP/1.1" 200 112
+[14/Dec/2025 07:10:41] "GET /api/users/profile/ HTTP/1.1" 200 117
+[14/Dec/2025 07:10:41] "GET /api/users/profile/ HTTP/1.1" 200 117
+/app/backend/ims_mrp/settings.py changed, reloading.
+Performing system checks...
+
+System check identified no issues (0 silenced).
+December 14, 2025 - 07:07:50
+Django version 6.0, using settings 'ims_mrp.settings'
+Starting development server at http://0.0.0.0:8000/
+Quit the server with CONTROL-C.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/6.0/howto/deployment/
+Watching for file changes with StatReloader
+/app/backend/inventory/views.py changed, reloading.
+Performing system checks...
+
+System check identified no issues (0 silenced).
+December 14, 2025 - 07:12:55
+Django version 6.0, using settings 'ims_mrp.settings'
+Starting development server at http://0.0.0.0:8000/
+Quit the server with CONTROL-C.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/6.0/howto/deployment/
+Watching for file changes with StatReloader
+[14/Dec/2025 07:14:44] "OPTIONS /api/users/token/ HTTP/1.1" 200 0
+[14/Dec/2025 07:14:45] "POST /api/users/token/ HTTP/1.1" 200 489
+[14/Dec/2025 07:14:46] "OPTIONS /api/users/profile/ HTTP/1.1" 200 0
+[14/Dec/2025 07:14:46] "OPTIONS /api/dashboard/stats/ HTTP/1.1" 200 0
+[14/Dec/2025 07:14:46] "OPTIONS /api/dashboard/stats/ HTTP/1.1" 200 0
+[14/Dec/2025 07:14:46] "GET /api/dashboard/stats/ HTTP/1.1" 200 93
+[14/Dec/2025 07:14:46] "GET /api/users/profile/ HTTP/1.1" 200 117
+[14/Dec/2025 07:14:46] "OPTIONS /api/items/?page=1 HTTP/1.1" 200 0
+[14/Dec/2025 07:14:46] "OPTIONS /api/items/?page=1 HTTP/1.1" 200 0
+[14/Dec/2025 07:14:46] "GET /api/dashboard/stats/ HTTP/1.1" 200 93
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/rest_framework/pagination.py:207: UnorderedObjectListWarning: Pagination may yield inconsistent results with an unordered object_list: <class 'inventory.models.Item'> QuerySet.
+  paginator = self.django_paginator_class(queryset, page_size)
+[14/Dec/2025 07:14:46] "GET /api/items/?page=1 HTTP/1.1" 200 162
+[14/Dec/2025 07:14:46] "OPTIONS /api/items/?page=1&type=ingredient HTTP/1.1" 200 0
+[14/Dec/2025 07:14:46] "GET /api/items/?page=1 HTTP/1.1" 200 162
+[14/Dec/2025 07:14:46] "GET /api/items/?page=1&type=ingredient HTTP/1.1" 200 162
+[14/Dec/2025 07:14:47] "OPTIONS /api/items/?page=1&search=Test&type=ingredient HTTP/1.1" 200 0
+[14/Dec/2025 07:14:47] "GET /api/items/?page=1&search=Test&type=ingredient HTTP/1.1" 200 162
