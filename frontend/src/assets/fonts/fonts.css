@@ -1,0 +1,20 @@
+@font-face {
+  font-family: 'Gelica';
+  src: url('./Fontspring-DEMO-gelica-regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Gelica';
+  src: url('./Fontspring-DEMO-gelica-medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Gelica';
+  src: url('./Fontspring-DEMO-gelica-bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+}

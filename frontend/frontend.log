@@ -1,0 +1,10 @@
+
+> frontend@0.0.0 dev
+> vite --host
+
+
+  VITE v7.2.7  ready in 371 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://192.168.0.2:5173/
+7:13:37 AM [vite] (client) hmr update /src/pages/Inventory.tsx, /src/index.css
