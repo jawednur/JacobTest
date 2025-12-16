@@ -1,9 +1,14 @@
 from rest_framework import serializers
-from .models import Item, Location, Inventory, UnitConversion, Recipe, ProductionLog, VarianceLog
+from .models import Item, Location, Inventory, UnitConversion, Recipe, ProductionLog, VarianceLog, StoreItemSettings
 
 class ItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = Item
+        fields = '__all__'
+
+class StoreItemSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StoreItemSettings
         fields = '__all__'
 
 class LocationSerializer(serializers.ModelSerializer):

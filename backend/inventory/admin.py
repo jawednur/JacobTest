@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import (
-    Location, Item, UnitConversion, Recipe, RecipeIngredient, 
+    Location, Item, StoreItemSettings, UnitConversion, Recipe, RecipeIngredient,
     Inventory, ProductionLog, VarianceLog, DailyUsage
 )
 
@@ -11,9 +11,15 @@ class LocationAdmin(admin.ModelAdmin):
 
 @admin.register(Item)
 class ItemAdmin(admin.ModelAdmin):
-    list_display = ('name', 'type', 'base_unit', 'default_location')
+    list_display = ('name', 'type', 'base_unit', 'shelf_life_hours')
     list_filter = ('type',)
     search_fields = ('name',)
+
+@admin.register(StoreItemSettings)
+class StoreItemSettingsAdmin(admin.ModelAdmin):
+    list_display = ('store', 'item', 'par', 'default_location')
+    list_filter = ('store',)
+    search_fields = ('item__name',)
 
 class UnitConversionInline(admin.TabularInline):
     model = UnitConversion
