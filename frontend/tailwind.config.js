@@ -12,11 +12,19 @@ export default {
         tertiary: {
           gold: '#9B784C',
           bronze: '#B18B5B',
+          sand: '#D4C9B3',
         },
         background: '#F7F4EE', // Warm Off-White
+        'background-alt': '#F7F4EF',
+        'background-warm': '#EDE4D1',
         card: '#FFFFFF', // Pure White
         charcoal: '#3F4750', // Dark Charcoal
         'dark-grey': '#353D46', // Body text
+        neutral: {
+          light: '#DEDDDA',
+          pale: '#FEE9E8',
+        },
+        black: '#000000',
       },
       fontFamily: {
         serif: ['Gelica', 'serif'],

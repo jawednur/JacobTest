@@ -18,7 +18,7 @@ class InventoryAPITestCase(TestCase):
         Item.objects.create(name='Apple Pie', type='product', base_unit='single')
 
     def test_list_items(self):
-        response = self.client.get('/api/items/')
+        response = self.client.get('/api/inventory/items/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # Check pagination structure
         self.assertIn('count', response.data)
@@ -26,12 +26,12 @@ class InventoryAPITestCase(TestCase):
         self.assertEqual(response.data['count'], 3)
 
     def test_filter_items_by_type(self):
-        response = self.client.get('/api/items/', {'type': 'product'})
+        response = self.client.get('/api/inventory/items/', {'type': 'product'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['count'], 1)
         self.assertEqual(response.data['results'][0]['name'], 'Apple Pie')
 
     def test_search_items_by_name(self):
-        response = self.client.get('/api/items/', {'search': 'Apple'})
+        response = self.client.get('/api/inventory/items/', {'search': 'Apple'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['count'], 2) # Apple and Apple Pie

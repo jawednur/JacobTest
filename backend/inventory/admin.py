@@ -1,8 +1,18 @@
 from django.contrib import admin
 from .models import (
-    Location, Item, StoreItemSettings, UnitConversion, Recipe, RecipeIngredient,
+    Location, Item, StoreItemSettings, UnitConversion, Recipe, RecipeIngredient, RecipeStep, RecipeStepIngredient,
     Inventory, ProductionLog, VarianceLog, DailyUsage
 )
+
+class RecipeStepIngredientInline(admin.TabularInline):
+    model = RecipeStepIngredient
+    extra = 1
+
+@admin.register(RecipeStep)
+class RecipeStepAdmin(admin.ModelAdmin):
+    list_display = ('recipe', 'step_number', 'caption')
+    inlines = [RecipeStepIngredientInline]
+    ordering = ('recipe', 'step_number')
 
 @admin.register(Location)
 class LocationAdmin(admin.ModelAdmin):
@@ -11,7 +21,7 @@ class LocationAdmin(admin.ModelAdmin):
 
 @admin.register(Item)
 class ItemAdmin(admin.ModelAdmin):
-    list_display = ('name', 'type', 'base_unit', 'shelf_life_hours')
+    list_display = ('name', 'type', 'base_unit', 'shelf_life_days')
     list_filter = ('type',)
     search_fields = ('name',)
 
@@ -33,10 +43,14 @@ class RecipeIngredientInline(admin.TabularInline):
     model = RecipeIngredient
     extra = 1
 
+class RecipeStepInline(admin.StackedInline):
+    model = RecipeStep
+    extra = 1
+
 @admin.register(Recipe)
 class RecipeAdmin(admin.ModelAdmin):
     list_display = ('item', 'yield_quantity')
-    inlines = [RecipeIngredientInline]
+    inlines = [RecipeIngredientInline, RecipeStepInline]
 
 @admin.register(Inventory)
 class InventoryAdmin(admin.ModelAdmin):

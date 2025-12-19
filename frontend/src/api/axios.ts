@@ -35,7 +35,10 @@ api.interceptors.response.use(
                         refresh: refreshToken,
                     });
                     localStorage.setItem('accessToken', response.data.access);
-                    api.defaults.headers['Authorization'] = `Bearer ${response.data.access}`;
+                    // Update header for this instance
+                    api.defaults.headers.common['Authorization'] = `Bearer ${response.data.access}`;
+                    // Update header for original request
+                    originalRequest.headers['Authorization'] = `Bearer ${response.data.access}`;
                     return api(originalRequest);
                 } catch (refreshError) {
                     // Refresh token invalid/expired

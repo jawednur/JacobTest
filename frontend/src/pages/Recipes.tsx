@@ -1,0 +1,312 @@
+import React, { useState, useEffect } from 'react';
+import { getRecipesList } from '../services/api';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSwipeable } from 'react-swipeable';
+import { motion, AnimatePresence } from 'framer-motion';
+
+interface RecipeStepIngredient {
+    id: number;
+    item_name: string;
+    location_name: string;
+}
+
+interface RecipeStep {
+    id: number;
+    step_number: number;
+    instruction: string;
+    image: string | null;
+    caption: string;
+    ingredients: RecipeStepIngredient[];
+}
+
+interface RecipeIngredient {
+    id: number;
+    item_name: string;
+    quantity_required: number;
+    base_unit: string;
+    display_quantity: number;
+    display_unit: string;
+    location_name: string;
+}
+
+interface Recipe {
+    id: number;
+    item_name: string;
+    base_unit: string;
+    yield_quantity: number;
+    steps: RecipeStep[];
+    ingredients: RecipeIngredient[];
+}
+
+const RecipesPage: React.FC = () => {
+    const [recipes, setRecipes] = useState<Recipe[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
+
+    // Navigation & Query Params
+    const [searchParams] = useSearchParams();
+    const navigate = useNavigate();
+    const recipeIdParam = searchParams.get('id');
+
+    // Swipeable Card State
+    const [currentCardIndex, setCurrentCardIndex] = useState(0); // 0 = Overview, 1+ = Steps
+    const [slideDirection, setSlideDirection] = useState(0);
+
+    useEffect(() => {
+        const fetchRecipes = async () => {
+            try {
+                const data = await getRecipesList();
+                setRecipes(data);
+
+                // Check if ID in URL
+                if (recipeIdParam) {
+                    const found = data.find((r: Recipe) => r.id === parseInt(recipeIdParam));
+                    if (found) {
+                        setSelectedRecipe(found);
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to fetch recipes", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchRecipes();
+    }, [recipeIdParam]); // Re-run if ID param changes (though mostly on mount)
+
+    const handleSelectRecipe = (recipe: Recipe) => {
+        setSelectedRecipe(recipe);
+        setCurrentCardIndex(0);
+        setSlideDirection(0);
+        // Optional: update URL without reload to support bookmarking/back
+        // window.history.pushState({}, '', `/recipes?id=${recipe.id}`);
+    };
+
+    const handleBack = () => {
+        setSelectedRecipe(null);
+        navigate('/recipes'); // clear query param
+    };
+
+    // Card Navigation Logic
+    const totalCards = selectedRecipe ? 1 + (selectedRecipe.steps?.length || 0) : 0; // 1 for Overview + N steps
+
+    const handleNext = () => {
+        if (currentCardIndex < totalCards - 1) {
+            setSlideDirection(1);
+            setCurrentCardIndex(prev => prev + 1);
+        }
+    };
+
+    const handlePrev = () => {
+        if (currentCardIndex > 0) {
+            setSlideDirection(-1);
+            setCurrentCardIndex(prev => prev - 1);
+        }
+    };
+
+    const swipeHandlers = useSwipeable({
+        onSwipedLeft: handleNext,
+        onSwipedRight: handlePrev,
+        preventScrollOnSwipe: true,
+        trackMouse: true
+    });
+
+    if (loading) return <div className="p-8 text-center text-gray-500">Loading recipes...</div>;
+
+    // --- Detailed View (Swipeable Cards) ---
+    if (selectedRecipe) {
+        const steps = selectedRecipe.steps || [];
+        const progress = ((currentCardIndex + 1) / totalCards) * 100;
+
+        return (
+            <div className="fixed inset-0 bg-gray-100 flex flex-col overflow-hidden z-50">
+                {/* Header */}
+                <div className="bg-white px-4 py-3 shadow-sm z-10 flex justify-between items-center">
+                    <button
+                        onClick={handleBack}
+                        className="flex items-center text-gray-600 hover:text-gray-900"
+                    >
+                        <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                        Back
+                    </button>
+                    <div className="font-bold text-gray-800 truncate max-w-[200px]">
+                        {selectedRecipe.item_name}
+                    </div>
+                    <div className="text-sm text-gray-500 w-[70px] text-right">
+                        {currentCardIndex === 0 ? "Intro" : `Step ${currentCardIndex}/${steps.length}`}
+                    </div>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="w-full bg-gray-200 h-1">
+                    <div
+                        className="bg-blue-500 h-1 transition-all duration-300"
+                        style={{ width: `${progress}%` }}
+                    />
+                </div>
+
+                {/* Card Container */}
+                <div
+                    {...swipeHandlers}
+                    className="flex-1 flex flex-col items-center justify-start p-4 md:p-8 overflow-y-auto relative bg-gray-100"
+                >
+                    <AnimatePresence initial={false} custom={slideDirection} mode="wait">
+                        <motion.div
+                            key={currentCardIndex}
+                            custom={slideDirection}
+                            initial={{ x: slideDirection > 0 ? 300 : -300, opacity: 0 }}
+                            animate={{ x: 0, opacity: 1 }}
+                            exit={{ x: slideDirection > 0 ? -300 : 300, opacity: 0 }}
+                            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                            className="w-full max-w-lg"
+                        >
+                            {currentCardIndex === 0 ? (
+                                // --- Card 1: Overview (Ingredients & Yield) ---
+                                <div className="bg-white rounded-2xl shadow-xl overflow-hidden min-h-[500px] flex flex-col">
+                                    <div className="bg-amber-50 p-6 text-center">
+                                        <h1 className="text-3xl font-bold mb-2 text-gray-800">{selectedRecipe.item_name}</h1>
+                                        <div className="inline-block bg-amber-600 rounded-full px-3 py-1 text-sm font-semibold text-white">
+                                            Yields: {selectedRecipe.yield_quantity} {selectedRecipe.base_unit}
+                                        </div>
+                                    </div>
+
+                                    <div className="p-6 flex-1 overflow-y-auto">
+                                        <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Ingredients</h3>
+                                        {selectedRecipe.ingredients && selectedRecipe.ingredients.length > 0 ? (
+                                            <ul className="space-y-3">
+                                                {selectedRecipe.ingredients.map(ing => (
+                                                    <li key={ing.id} className="flex justify-between items-center text-sm">
+                                                        <div>
+                                                            <span className="font-medium text-gray-900">{ing.item_name}</span>
+                                                            {ing.location_name && (
+                                                                <div className="text-xs text-gray-500">{ing.location_name}</div>
+                                                            )}
+                                                        </div>
+                                                        <span className="bg-gray-100 text-gray-800 font-bold px-2 py-1 rounded">
+                                                            {ing.display_quantity} {ing.display_unit}
+                                                        </span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        ) : (
+                                            <p className="text-gray-500 italic">No ingredients listed.</p>
+                                        )}
+                                    </div>
+
+                                    <div className="p-4 bg-gray-50 text-center border-t text-gray-500 text-sm">
+                                        Swipe Left to Start Steps →
+                                    </div>
+                                </div>
+                            ) : (
+                                // --- Card 2+: Recipe Steps ---
+                                (() => {
+                                    const step = steps[currentCardIndex - 1]; // Adjust index
+                                    return (
+                                        <div className="bg-white rounded-2xl shadow-xl overflow-hidden min-h-[500px] flex flex-col">
+                                            {/* Image Section */}
+                                            {step.image ? (
+                                                <div className="h-48 w-full bg-gray-200 relative">
+                                                    <img
+                                                        src={step.image}
+                                                        alt={`Step ${step.step_number}`}
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <div className="h-24 bg-gray-100 flex items-center justify-center text-gray-400">
+                                                    <span className="text-sm italic">No image for this step</span>
+                                                </div>
+                                            )}
+
+                                            <div className="p-6 flex-1 flex flex-col">
+                                                <div className="flex items-center mb-4">
+                                                    <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center text-xl font-bold mr-3 flex-shrink-0 shadow-md">
+                                                        {step.step_number}
+                                                    </div>
+                                                    <h3 className="text-xl font-bold text-gray-800">Step {step.step_number}</h3>
+                                                </div>
+
+                                                <div className="prose prose-blue text-gray-700 leading-relaxed text-lg flex-1 overflow-y-auto">
+                                                    {step.instruction}
+                                                </div>
+
+                                                {step.caption && (
+                                                    <div className="mt-4 p-3 bg-yellow-50 text-yellow-800 text-sm rounded-lg border border-yellow-100 italic">
+                                                        💡 {step.caption}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Step specific ingredients if any (schema supported?) */}
+                                            {/* Assuming step.ingredients might exist based on schema or future expansion, currently global ingredients used in overview */}
+                                        </div>
+                                    );
+                                })()
+                            )}
+                        </motion.div>
+                    </AnimatePresence>
+
+                    {/* Navigation Controls (for desktop / non-swipe users) */}
+                    <div className="flex justify-between w-full max-w-lg mt-6">
+                        <button
+                            onClick={handlePrev}
+                            disabled={currentCardIndex === 0}
+                            className="bg-white px-4 py-2 rounded shadow text-gray-700 disabled:opacity-50 hover:bg-gray-50"
+                        >
+                            ← Prev
+                        </button>
+                        <button
+                            onClick={handleNext}
+                            disabled={currentCardIndex === totalCards - 1}
+                            className="bg-blue-600 px-6 py-2 rounded shadow text-white disabled:opacity-50 hover:bg-blue-700 font-bold border border-black"
+                        >
+                            {currentCardIndex === totalCards - 1 ? "Done" : "Next →"}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // --- List View ---
+    return (
+        <div className="p-6 bg-gray-50 min-h-screen">
+            <div className="max-w-6xl mx-auto">
+                <h1 className="text-2xl font-bold mb-6 text-gray-800">Recipes</h1>
+
+                {recipes.length === 0 ? (
+                    <div className="bg-white rounded-lg shadow-md p-12 text-center text-gray-500">
+                        No recipes found.
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {recipes.map(recipe => (
+                            <div
+                                key={recipe.id}
+                                onClick={() => handleSelectRecipe(recipe)}
+                                className="bg-white rounded-xl shadow-sm border border-gray-200 hover:border-blue-500 hover:shadow-md transition-all cursor-pointer overflow-hidden group"
+                            >
+                                <div className="p-6">
+                                    <h2 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-blue-600">
+                                        {recipe.item_name}
+                                    </h2>
+                                    <div className="text-sm text-gray-500">
+                                        Yields: <span className="font-medium text-gray-700">{recipe.yield_quantity} {recipe.base_unit}</span>
+                                    </div>
+                                    <div className="mt-4 flex items-center text-blue-600 text-sm font-medium">
+                                        View Instructions
+                                        <svg className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+export default RecipesPage;

@@ -17,14 +17,14 @@ class StoreScopeTestCase(TestCase):
             name="Flour",
             type="ingredient",
             base_unit="Gram",
-            shelf_life_hours=None # Ingredients don't have shelf life
+            shelf_life_days=None # Ingredients don't have shelf life
         )
 
         self.cake = Item.objects.create(
             name="Cake",
             type="product",
             base_unit="Slice",
-            shelf_life_hours=72 # Products do
+            shelf_life_days=3 # Products do
         )
 
     def test_global_item_local_settings(self):
@@ -57,7 +57,7 @@ class StoreScopeTestCase(TestCase):
 
     def test_shelf_life_nullability(self):
         """
-        Verify that shelf_life_hours can be null for ingredients.
+        Verify that shelf_life_days can be null for ingredients.
         """
-        self.assertIsNone(self.flour.shelf_life_hours)
-        self.assertEqual(self.cake.shelf_life_hours, 72)
+        self.assertIsNone(self.flour.shelf_life_days)
+        self.assertEqual(self.cake.shelf_life_days, 3)

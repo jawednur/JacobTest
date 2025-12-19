@@ -15,12 +15,12 @@ class InventoryAPITestCase(TestCase):
             'name': 'Test Item',
             'type': 'ingredient',
             'base_unit': 'kg',
-            'shelf_life_hours': 24
+            'shelf_life_days': 1
         }
         self.item = Item.objects.create(**self.item_data)
 
     def test_get_items(self):
-        response = self.client.get('/api/items/')
+        response = self.client.get('/api/inventory/items/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # With pagination, response.data is a dict with 'results'
         self.assertIn('results', response.data)
@@ -31,14 +31,15 @@ class InventoryAPITestCase(TestCase):
             'name': 'New Item',
             'type': 'product',
             'base_unit': 'box',
-            'shelf_life_hours': 48
+            'shelf_life_days': 2
         }
-        response = self.client.post('/api/items/', new_item_data, format='json')
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post('/api/inventory/items/', new_item_data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Item.objects.count(), 2)
 
     def test_dashboard_stats(self):
-        response = self.client.get('/api/dashboard/stats/')
+        response = self.client.get('/api/inventory/dashboard/stats/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('low_stock_count', response.data)
         self.assertIn('expiring_today_count', response.data)

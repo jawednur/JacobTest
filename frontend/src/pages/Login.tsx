@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import logo from '../assets/toastique_horiz_gold-web.svg';
 
 const Login: React.FC = () => {
     const [username, setUsername] = useState('');
@@ -18,8 +19,9 @@ const Login: React.FC = () => {
                 username,
                 password
             });
-            login(response.data);
+            await login(response.data);
             navigate('/');
+
         } catch (err) {
             setError('Invalid credentials');
         }
@@ -27,43 +29,40 @@ const Login: React.FC = () => {
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-background">
-            <div className="bg-card p-8 rounded-lg shadow-lg w-full max-w-md">
+            <div className="bg-card p-8 rounded-lg shadow-lg w-full max-w-md border border-neutral-light">
                 <div className="text-center mb-8">
-                    {/* Placeholder Logo */}
-                    <svg className="w-16 h-16 mx-auto mb-4 text-primary" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2L2 7l10 5 10-5-10-5zm0 9l2.5-1.25L12 8.5l-2.5 1.25L12 11zm0 2.5l-5-2.5-5 2.5L12 22l10-8.5-5-2.5-5 2.5z"/>
-                    </svg>
-                    <h1 className="text-3xl font-serif font-bold text-dark-grey">Welcome Back</h1>
+                    <img src={logo} alt="Toastique" className="h-16 mx-auto mb-4" />
+                    <p className="text-charcoal mt-2 font-serif">Sign in to your account</p>
                 </div>
                 {error && (
-                    <div className="bg-red-100 border border-primary text-primary px-4 py-3 rounded mb-4 text-sm font-sans">
+                    <div className="bg-red-50 border border-red-200 text-primary px-4 py-3 rounded mb-4 text-sm">
                         {error}
                     </div>
                 )}
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div>
-                        <label className="block text-xs font-bold text-dark-grey uppercase tracking-wider mb-2 font-sans">Username</label>
+                        <label className="block text-sm font-medium text-charcoal mb-2 font-serif">Username</label>
                         <input
                             type="text"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
-                            className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:border-primary font-sans"
+                            className="w-full px-4 py-2 border border-neutral-light rounded-md focus:outline-none focus:ring-2 focus:ring-tertiary-gold bg-background-alt text-dark-grey"
                             required
                         />
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-dark-grey uppercase tracking-wider mb-2 font-sans">Password</label>
+                        <label className="block text-sm font-medium text-charcoal mb-2 font-serif">Password</label>
                         <input
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:border-primary font-sans"
+                            className="w-full px-4 py-2 border border-neutral-light rounded-md focus:outline-none focus:ring-2 focus:ring-tertiary-gold bg-background-alt text-dark-grey"
                             required
                         />
                     </div>
                     <button
                         type="submit"
-                        className="w-full bg-primary text-white font-bold py-3 px-4 rounded hover:bg-tertiary-gold transition-colors font-sans uppercase tracking-wider"
+                        className="w-full bg-primary text-white font-bold py-3 px-4 rounded-md hover:opacity-90 transition-colors font-serif tracking-wide"
                     >
                         Sign In
                     </button>
