@@ -3,3 +3,7 @@ djangorestframework
 django-cors-headers
 djangorestframework-simplejwt
 django-filter
+gunicorn
+psycopg2-binary
+dj-database-url
+whitenoise

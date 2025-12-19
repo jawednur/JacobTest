@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+
 const api = axios.create({
-    baseURL: 'http://localhost:8000/api/', // Adjust if backend port differs
+    baseURL: BASE_URL, // Adjust if backend port differs
     headers: {
         'Content-Type': 'application/json',
     },
@@ -31,7 +33,7 @@ api.interceptors.response.use(
             const refreshToken = localStorage.getItem('refreshToken');
             if (refreshToken) {
                 try {
-                    const response = await axios.post('http://localhost:8000/api/users/token/refresh/', {
+                    const response = await axios.post(`${BASE_URL}/users/token/refresh/`, {
                         refresh: refreshToken,
                     });
                     localStorage.setItem('accessToken', response.data.access);
