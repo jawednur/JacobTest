@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
     LayoutDashboard, 
@@ -20,7 +20,6 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children }) => {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
-    const location = useLocation();
 
     const handleLogout = () => {
         logout();
