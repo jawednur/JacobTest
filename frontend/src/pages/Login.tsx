@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api/axios';
 import logo from '../assets/toastique_horiz_gold-web.svg';
 
 const Login: React.FC = () => {
@@ -15,7 +15,7 @@ const Login: React.FC = () => {
         e.preventDefault();
         setError('');
         try {
-            const response = await axios.post('http://localhost:8000/api/users/token/', {
+            const response = await api.post('/users/token/', {
                 username,
                 password
             });
