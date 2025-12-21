@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getUsers, createUser, updateUser, getStores } from '../services/api';
-import { Users, Database, FileText, Server, Edit, Trash2 } from 'lucide-react';
+import { Users, Database, FileText, Server, Edit } from 'lucide-react';
 
 interface User {
     id: number;
@@ -21,7 +21,7 @@ interface Store {
 const ITDashboard: React.FC = () => {
     const [users, setUsers] = useState<User[]>([]);
     const [stores, setStores] = useState<Store[]>([]);
-    const [loading, setLoading] = useState(true);
+    // const [loading, setLoading] = useState(true);
     const [showUserModal, setShowUserModal] = useState(false);
     const [editingUser, setEditingUser] = useState<User | null>(null);
 
@@ -48,7 +48,7 @@ const ITDashboard: React.FC = () => {
         } catch (error) {
             console.error("Error fetching data", error);
         } finally {
-            setLoading(false);
+            // setLoading(false);
         }
     };
 
