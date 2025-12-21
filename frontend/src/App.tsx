@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import EmployeeDashboard from './pages/EmployeeDashboard';
+import ITDashboard from './pages/ITDashboard';
 import ProductionLogPage from './pages/ProductionLog';
 import StocktakePage from './pages/Stocktake';
 import InventoryPage from './pages/Inventory';
@@ -28,7 +29,8 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: strin
 
     if (allowedRoles && user && !allowedRoles.includes(user.role)) {
         // Role mismatch redirect
-        if (user.role === 'employee') return <EmployeeDashboard />; // Fallback to their dash
+        if (user.role === 'employee') return <EmployeeDashboard />;
+        if (user.role === 'it') return <ITDashboard />;
         return <div>Access Denied</div>;
     }
 
@@ -42,6 +44,9 @@ const DashboardDispatcher: React.FC = () => {
 
     if (user?.role === 'employee') {
         return <EmployeeDashboard />;
+    }
+    if (user?.role === 'it') {
+        return <ITDashboard />;
     }
     return <Dashboard />; // Default/Admin
 };
@@ -63,7 +68,7 @@ function App() {
                     } />
 
                     <Route path="/inventory" element={
-                        <ProtectedRoute allowedRoles={['admin']}>
+                        <ProtectedRoute allowedRoles={['admin', 'it']}>
                             <Layout>
                                 <InventoryPage />
                             </Layout>
@@ -71,7 +76,7 @@ function App() {
                     } />
 
                     <Route path="/items" element={
-                        <ProtectedRoute allowedRoles={['admin']}>
+                        <ProtectedRoute allowedRoles={['admin', 'it']}>
                             <Layout>
                                 <ItemsPage />
                             </Layout>
@@ -79,7 +84,7 @@ function App() {
                     } />
 
                     <Route path="/unit-conversions" element={
-                        <ProtectedRoute allowedRoles={['admin']}>
+                        <ProtectedRoute allowedRoles={['admin', 'it']}>
                             <Layout>
                                 <UnitConversionsPage />
                             </Layout>
@@ -103,7 +108,7 @@ function App() {
                     } />
 
                     <Route path="/stocktake" element={
-                        <ProtectedRoute allowedRoles={['admin']}>
+                        <ProtectedRoute allowedRoles={['admin', 'it']}>
                             <Layout>
                                 <StocktakePage />
                             </Layout>

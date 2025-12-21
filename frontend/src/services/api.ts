@@ -72,11 +72,6 @@ export const getRecipes = async () => {
 };
 
 export const getRecipeDetails = async (itemId: number) => {
-  // We assume itemId links to a recipe. Use the new recipes endpoint or filter.
-  // The recipes endpoint is /inventory/recipes/ and filters by item name? No, I added search_fields=['item__name'].
-  // Ideally I should filter by item_id directly.
-  // Let's assume RecipeViewSet has DjangoFilterBackend and I can filter by item.
-  // Assuming I can do /inventory/recipes/?item=ID.
   const response = await api.get(`/inventory/recipes/?item=${itemId}`);
   // It returns a list, pick the first one
   return response.data.results[0];
@@ -158,6 +153,27 @@ export const disposeExpiredItem = async (inventoryId: number, notes: string = ''
 export const getExpiredItemLogs = async () => {
   const response = await api.get('/inventory/expired-logs/');
   return response.data.results;
+};
+
+// User Management (IT)
+export const getUsers = async () => {
+  const response = await api.get('/users/management/');
+  return response.data.results || response.data;
+};
+
+export const createUser = async (userData: any) => {
+  const response = await api.post('/users/management/', userData);
+  return response.data;
+};
+
+export const updateUser = async (id: number, userData: any) => {
+  const response = await api.patch(`/users/management/${id}/`, userData);
+  return response.data;
+};
+
+export const getStores = async () => {
+  const response = await api.get('/users/stores/');
+  return response.data.results || response.data;
 };
 
 export default api;

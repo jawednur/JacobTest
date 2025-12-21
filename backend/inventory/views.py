@@ -26,13 +26,14 @@ class ItemViewSet(viewsets.ModelViewSet):
         user = self.request.user
         store = getattr(user, 'store', None)
         
+        # IT Admin / Superuser sees all
+        if getattr(user, 'role', '') == 'it' or user.is_superuser or user.is_staff:
+            return Item.objects.all()
+
         if store:
             # Show Global Items + Store-Specific Items
             return Item.objects.filter(Q(store=store) | Q(store__isnull=True))
         
-        if user.is_staff:
-            return Item.objects.all()
-            
         return Item.objects.filter(store__isnull=True)
 
     def perform_update(self, serializer):
@@ -106,7 +107,7 @@ class ItemViewSet(viewsets.ModelViewSet):
                 instructions="Auto-generated recipe for product."
              )
 
-class RecipeViewSet(viewsets.ReadOnlyModelViewSet):
+class RecipeViewSet(viewsets.ModelViewSet):
     """
     API endpoint for viewing recipes.
     """
@@ -120,28 +121,14 @@ class RecipeViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         user = self.request.user
         store = getattr(user, 'store', None)
+
+        if getattr(user, 'role', '') == 'it' or user.is_superuser or user.is_staff:
+             return Recipe.objects.all()
         
         if store:
-             # Return all products (items with type='product') + any items that have recipes
-             # But ProductionLogPage expects a Recipe object, not an Item object. 
-             # Wait, ProductionLogPage uses getRecipesList -> /inventory/recipes/
-             # So we need to ensure every Product has a Recipe, OR we need to return a "dummy" recipe for Products?
-             
-             # The user asked: "if it is a product, it should imediatly be on of the product options under log prep"
-             # Currently log prep iterates 'recipes'. 
-             # If I create a product item, I don't necessarily create a Recipe for it immediately.
-             # So we should auto-create a default Recipe for every Product Item? 
-             # OR we should modify this view to return a "Recipe-like" structure for all Products.
-             
-             # Option 1: Auto-create Recipe on Item creation (cleanest for consistency)
-             # Let's check ItemViewSet.perform_create
-             
              visible_items = Item.objects.filter(Q(store=store) | Q(store__isnull=True))
              return Recipe.objects.filter(item__in=visible_items)
         
-        if user.is_staff:
-             return Recipe.objects.all()
-
         return Recipe.objects.filter(item__store__isnull=True)
 
 
@@ -157,8 +144,10 @@ class InventoryViewSet(viewsets.ModelViewSet):
     search_fields = ['item__name']
 
     def get_queryset(self):
-        # Filter by user's store
         user = self.request.user
+        if getattr(user, 'role', '') == 'it' or user.is_superuser:
+            return Inventory.objects.all()
+
         store = getattr(user, 'store', None)
         if store:
             return Inventory.objects.filter(store=store)
@@ -185,6 +174,12 @@ class InventoryViewSet(viewsets.ModelViewSet):
         user = request.user
         store = getattr(user, 'store', None)
         if not store:
+            # IT user viewing expired?
+            if getattr(user, 'role', '') == 'it' or user.is_superuser:
+                 today = timezone.now().date()
+                 expired_qs = Inventory.objects.filter(expiration_date__date__lt=today, quantity__gt=0)
+                 serializer = self.get_serializer(expired_qs, many=True)
+                 return Response(serializer.data)
             return Response({"error": "No store context"}, status=400)
             
         today = timezone.now().date()
@@ -200,15 +195,14 @@ class InventoryViewSet(viewsets.ModelViewSet):
         
         # Log the disposal
         ExpiredItemLog.objects.create(
-            store=store,
+            store=store if store else inventory.store, # Fallback to inventory store if IT user
             item=inventory.item,
             quantity_expired=inventory.quantity,
             user=user,
             notes=request.data.get('notes', '')
         )
         
-        # Delete the inventory record (or set to 0? usually we remove expired stock entirely or move to waste)
-        # Assuming we just delete the specific inventory record as it is expired batch
+        # Delete the inventory record
         inventory.delete()
         
         return Response({"message": "Expired item disposed and logged."})
@@ -224,6 +218,9 @@ class LocationViewSet(viewsets.ReadOnlyModelViewSet):
     
     def get_queryset(self):
         user = self.request.user
+        if getattr(user, 'role', '') == 'it' or user.is_superuser:
+            return Location.objects.all()
+
         store = getattr(user, 'store', None)
         if store:
             return Location.objects.filter(store=store)
@@ -243,12 +240,12 @@ class UnitConversionViewSet(viewsets.ModelViewSet):
         user = self.request.user
         store = getattr(user, 'store', None)
         
+        if getattr(user, 'role', '') == 'it' or user.is_superuser or user.is_staff:
+             return UnitConversion.objects.all()
+        
         if store:
              visible_items = Item.objects.filter(Q(store=store) | Q(store__isnull=True))
              return UnitConversion.objects.filter(item__in=visible_items)
-             
-        if user.is_staff:
-             return UnitConversion.objects.all()
         
         return UnitConversion.objects.filter(item__store__isnull=True)
 
@@ -264,6 +261,16 @@ class ProductionLogViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['store']
 
+    def get_queryset(self):
+        user = self.request.user
+        if getattr(user, 'role', '') == 'it' or user.is_superuser:
+            return ProductionLog.objects.all()
+        
+        store = getattr(user, 'store', None)
+        if store:
+            return ProductionLog.objects.filter(store=store)
+        return ProductionLog.objects.none()
+
     def perform_create(self, serializer):
         user = self.request.user
         store = getattr(user, 'store', None)
@@ -273,6 +280,9 @@ class ProductionLogViewSet(viewsets.ModelViewSet):
         if store:
              production_log = serializer.save(user=user, store=store)
         else:
+             # IT user creating log? Might need to specify store in serializer?
+             # For now, allow save without store if model allows (model says store is FK non-null)
+             # If IT user tries to create without store, it will fail DB constraint unless provided in data
              production_log = serializer.save(user=user)
         
         # 2. Process logic (Check + Deduct)
@@ -305,7 +315,16 @@ class StocktakeView(APIView):
         store = getattr(user, 'store', None)
         
         if not store:
-            return Response({"error": "User does not belong to a store."}, status=status.HTTP_400_BAD_REQUEST)
+            # Maybe IT user can pass store_id in body?
+            store_id = request.data.get('store_id')
+            if (getattr(user, 'role', '') == 'it' or user.is_superuser) and store_id:
+                from .models import Store
+                try:
+                    store = Store.objects.get(id=store_id)
+                except Store.DoesNotExist:
+                     return Response({"error": "Store not found."}, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                return Response({"error": "User does not belong to a store."}, status=status.HTTP_400_BAD_REQUEST)
             
         stock_data = request.data.get('counts', [])
         if not stock_data:
@@ -330,6 +349,10 @@ class DashboardStatsView(APIView):
     def get(self, request):
         user = request.user
         store_id = getattr(user, 'store_id', None)
+
+        # Allow IT user to filter by store via query param
+        if (getattr(user, 'role', '') == 'it' or user.is_superuser) and 'store_id' in request.query_params:
+             store_id = request.query_params.get('store_id')
 
         inventory_qs = Inventory.objects.all()
         if store_id:
@@ -362,6 +385,7 @@ class DashboardStatsView(APIView):
             low_stock_count = len(low_stock_items)
         else:
              # Fallback logic if no store context (e.g. counting individual inventory entries < 10)
+             # For IT Dashboard global view
              low_stock_count = inventory_qs.filter(quantity__lt=10).count()
 
         # 2. Expiration Logic
@@ -410,6 +434,16 @@ class ReceivingLogViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['store', 'item']
 
+    def get_queryset(self):
+        user = self.request.user
+        if getattr(user, 'role', '') == 'it' or user.is_superuser:
+            return ReceivingLog.objects.all()
+
+        store = getattr(user, 'store', None)
+        if store:
+            return ReceivingLog.objects.filter(store=store)
+        return ReceivingLog.objects.none()
+
     def perform_create(self, serializer):
         user = self.request.user
         store = getattr(user, 'store', None)
@@ -431,6 +465,9 @@ class StocktakeSessionViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         user = self.request.user
+        if getattr(user, 'role', '') == 'it' or user.is_superuser:
+            return StocktakeSession.objects.all()
+
         store = getattr(user, 'store', None)
         if store:
             return StocktakeSession.objects.filter(store=store)
@@ -440,8 +477,18 @@ class StocktakeSessionViewSet(viewsets.ModelViewSet):
     def start(self, request):
         user = request.user
         store = getattr(user, 'store', None)
+        
         if not store:
-            return Response({"error": "No store associated with user."}, status=status.HTTP_400_BAD_REQUEST)
+            # Allow IT user to start for a store
+            store_id = request.data.get('store_id')
+            if (getattr(user, 'role', '') == 'it' or user.is_superuser) and store_id:
+                from .models import Store
+                try:
+                    store = Store.objects.get(id=store_id)
+                except Store.DoesNotExist:
+                     return Response({"error": "Store not found."}, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                return Response({"error": "No store associated with user."}, status=status.HTTP_400_BAD_REQUEST)
             
         # Check if there is already a pending session?
         pending = StocktakeSession.objects.filter(store=store, status='PENDING').first()
@@ -513,6 +560,9 @@ class ExpiredItemLogViewSet(viewsets.ReadOnlyModelViewSet):
     
     def get_queryset(self):
         user = self.request.user
+        if getattr(user, 'role', '') == 'it' or user.is_superuser:
+            return ExpiredItemLog.objects.all()
+
         store = getattr(user, 'store', None)
         if store:
             return ExpiredItemLog.objects.filter(store=store).order_by('-disposed_at')

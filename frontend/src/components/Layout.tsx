@@ -26,7 +26,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         navigate('/login');
     };
 
-    const isAdmin = user?.role === 'admin';
+    const isAdmin = user?.role === 'admin' || user?.role === 'it';
 
     const navItems = [
         { 

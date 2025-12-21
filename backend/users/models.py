@@ -12,6 +12,7 @@ class CustomUser(AbstractUser):
     ROLE_CHOICES = (
         ('admin', 'Admin'),
         ('employee', 'Employee'),
+        ('it', 'IT Admin'),
     )
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='employee')
     store = models.ForeignKey(Store, on_delete=models.SET_NULL, null=True, blank=True, related_name='users')
