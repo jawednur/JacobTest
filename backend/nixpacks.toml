@@ -8,5 +8,5 @@ cmds = ["python -m venv /opt/venv && . /opt/venv/bin/activate && pip install -r 
 cmds = ["python manage.py collectstatic --noinput"]
 
 [start]
-cmd = "gunicorn ims_mrp.wsgi"
+cmd = "python manage.py migrate && gunicorn ims_mrp.wsgi"
 
