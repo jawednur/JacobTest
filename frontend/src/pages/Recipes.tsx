@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { getRecipesList } from '../services/api';
+import { getRecipesList, deleteRecipe } from '../services/api';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useSwipeable } from 'react-swipeable';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import CreateRecipeModal from '../components/CreateRecipeModal';
-import { Plus } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 
 interface RecipeStepIngredient {
     id: number;
@@ -92,6 +92,23 @@ const RecipesPage: React.FC = () => {
     const handleBack = () => {
         setSelectedRecipe(null);
         navigate('/recipes'); // clear query param
+    };
+
+    const handleDeleteRecipe = async (e: React.MouseEvent, recipeId: number) => {
+        e.stopPropagation(); // Prevent opening the recipe details
+        if (window.confirm('Are you sure you want to delete this recipe?')) {
+            try {
+                await deleteRecipe(recipeId);
+                // Refresh list
+                fetchRecipes();
+                if (selectedRecipe?.id === recipeId) {
+                    handleBack();
+                }
+            } catch (error) {
+                console.error("Failed to delete recipe", error);
+                alert("Failed to delete recipe.");
+            }
+        }
     };
 
     // Card Navigation Logic
@@ -308,10 +325,19 @@ const RecipesPage: React.FC = () => {
                             <div
                                 key={recipe.id}
                                 onClick={() => handleSelectRecipe(recipe)}
-                                className="bg-white rounded-xl shadow-sm border border-gray-200 hover:border-blue-500 hover:shadow-md transition-all cursor-pointer overflow-hidden group"
+                                className="bg-white rounded-xl shadow-sm border border-gray-200 hover:border-blue-500 hover:shadow-md transition-all cursor-pointer overflow-hidden group relative"
                             >
+                                {(user?.role === 'admin' || user?.role === 'it') && (
+                                    <button
+                                        onClick={(e) => handleDeleteRecipe(e, recipe.id)}
+                                        className="absolute top-4 right-4 p-2 bg-white text-gray-400 hover:text-red-600 rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                        title="Delete Recipe"
+                                    >
+                                        <Trash2 className="w-5 h-5" />
+                                    </button>
+                                )}
                                 <div className="p-6">
-                                    <h2 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-blue-600">
+                                    <h2 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-blue-600 pr-8">
                                         {recipe.item_name}
                                     </h2>
                                     <div className="text-sm text-gray-500">

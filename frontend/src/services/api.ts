@@ -186,4 +186,8 @@ export const updateRecipe = async (id: number, data: any) => {
   return response.data;
 };
 
+export const deleteRecipe = async (id: number) => {
+  await api.delete(`/inventory/recipes/${id}/`);
+};
+
 export default api;

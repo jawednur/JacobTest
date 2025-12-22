@@ -2,16 +2,25 @@ import React, { useState, useEffect } from 'react';
 import { X, Plus, Trash2, Save } from 'lucide-react';
 import { getItems, createRecipe, createItem } from '../services/api';
 
+interface UnitConversion {
+    id: number;
+    unit_name: string;
+    factor: number;
+}
+
 interface Item {
     id: number;
     name: string;
     type: string;
     base_unit: string;
+    conversions?: UnitConversion[];
 }
 
 interface IngredientInput {
     ingredient_item: number; // Item ID
-    quantity_required: number;
+    quantity_required: number; // Raw input quantity
+    selected_unit_factor: number; // 1 for base unit, >1 for conversions
+    selected_unit_name: string;
 }
 
 interface StepInput {
@@ -29,16 +38,17 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
     const [products, setProducts] = useState<Item[]>([]);
     const [ingredientsList, setIngredientsList] = useState<Item[]>([]);
     const [loading, setLoading] = useState(false);
-    
+
     // Form State
     const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
     const [isNewProduct, setIsNewProduct] = useState(false);
     const [newProductName, setNewProductName] = useState('');
     const [newProductUnit, setNewProductUnit] = useState('Each');
-    
+    const [shelfLife, setShelfLife] = useState<number>(1);
+
     const [yieldQuantity, setYieldQuantity] = useState<number>(1);
     // const [yieldUnit, setYieldUnit] = useState<number | null>(null); // Keeping simple for now
-    
+
     const [recipeIngredients, setRecipeIngredients] = useState<IngredientInput[]>([]);
     const [steps, setSteps] = useState<StepInput[]>([{ step_number: 1, instruction: '' }]);
 
@@ -62,7 +72,12 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
     };
 
     const handleAddIngredient = () => {
-        setRecipeIngredients([...recipeIngredients, { ingredient_item: 0, quantity_required: 0 }]);
+        setRecipeIngredients([...recipeIngredients, {
+            ingredient_item: 0,
+            quantity_required: 0,
+            selected_unit_factor: 1,
+            selected_unit_name: ''
+        }]);
     };
 
     const handleRemoveIngredient = (index: number) => {
@@ -73,7 +88,40 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
 
     const handleIngredientChange = (index: number, field: keyof IngredientInput, value: any) => {
         const newIngredients = [...recipeIngredients];
-        newIngredients[index] = { ...newIngredients[index], [field]: value };
+        const currentIng = newIngredients[index];
+
+        if (field === 'ingredient_item') {
+            const item = ingredientsList.find(i => i.id === Number(value));
+            if (item) {
+                newIngredients[index] = {
+                    ...currentIng,
+                    ingredient_item: item.id,
+                    selected_unit_factor: 1, // Reset to base unit on item change
+                    selected_unit_name: item.base_unit
+                };
+            } else {
+                // Reset if invalid/placeholder selected
+                newIngredients[index] = {
+                    ...currentIng,
+                    ingredient_item: 0,
+                    selected_unit_factor: 1,
+                    selected_unit_name: ''
+                };
+            }
+        } else {
+            newIngredients[index] = { ...currentIng, [field]: value };
+        }
+
+        setRecipeIngredients(newIngredients);
+    };
+
+    const handleUnitChange = (index: number, factor: number, name: string) => {
+        const newIngredients = [...recipeIngredients];
+        newIngredients[index] = {
+            ...newIngredients[index],
+            selected_unit_factor: factor,
+            selected_unit_name: name
+        };
         setRecipeIngredients(newIngredients);
     };
 
@@ -109,7 +157,7 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
                     type: 'product',
                     base_unit: newProductUnit,
                     // defaults
-                    shelf_life_days: 1
+                    shelf_life_days: shelfLife
                 });
                 targetItemId = newItem.id;
             }
@@ -123,7 +171,13 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
             const recipeData = {
                 item: targetItemId,
                 yield_quantity: yieldQuantity,
-                ingredients: recipeIngredients.filter(i => i.ingredient_item !== 0 && i.quantity_required > 0),
+                ingredients: recipeIngredients
+                    .filter(i => i.ingredient_item !== 0 && i.quantity_required > 0)
+                    .map(i => ({
+                        ingredient_item: i.ingredient_item,
+                        // Convert to base units for backend
+                        quantity_required: i.quantity_required * i.selected_unit_factor
+                    })),
                 steps: steps.filter(s => s.instruction.trim() !== '')
             };
 
@@ -156,18 +210,18 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
                         <label className="block text-sm font-medium text-gray-700 mb-2">Recipe For</label>
                         <div className="flex items-center mb-4">
                             <label className="flex items-center mr-6 cursor-pointer">
-                                <input 
-                                    type="radio" 
-                                    checked={!isNewProduct} 
+                                <input
+                                    type="radio"
+                                    checked={!isNewProduct}
                                     onChange={() => setIsNewProduct(false)}
                                     className="mr-2 h-4 w-4 text-blue-600"
                                 />
                                 Existing Product
                             </label>
                             <label className="flex items-center cursor-pointer">
-                                <input 
-                                    type="radio" 
-                                    checked={isNewProduct} 
+                                <input
+                                    type="radio"
+                                    checked={isNewProduct}
                                     onChange={() => setIsNewProduct(true)}
                                     className="mr-2 h-4 w-4 text-blue-600"
                                 />
@@ -197,6 +251,16 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
                                         placeholder="e.g. Plate"
                                     />
                                 </div>
+                                <div className="col-span-2">
+                                    <label className="block text-xs font-medium text-gray-500 mb-1">Shelf Life (Days)</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        className="w-full border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                        value={shelfLife}
+                                        onChange={(e) => setShelfLife(parseInt(e.target.value) || 1)}
+                                    />
+                                </div>
                             </div>
                         ) : (
                             <select
@@ -214,8 +278,8 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
 
                     {/* Yield */}
                     <div className="mb-8">
-                         <label className="block text-sm font-medium text-gray-700 mb-2">Yields</label>
-                         <div className="flex items-center">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Yields</label>
+                        <div className="flex items-center">
                             <input
                                 type="number"
                                 min="0.1"
@@ -227,7 +291,7 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
                             <span className="text-gray-600">
                                 {isNewProduct ? newProductUnit : (selectedProductId ? products.find(p => p.id === selectedProductId)?.base_unit : 'Units')}
                             </span>
-                         </div>
+                        </div>
                     </div>
 
                     {/* Ingredients */}
@@ -245,45 +309,71 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
                             {recipeIngredients.length === 0 && (
                                 <p className="text-sm text-gray-500 text-center italic">No ingredients added yet.</p>
                             )}
-                            {recipeIngredients.map((ing, idx) => (
-                                <div key={idx} className="flex gap-2 items-start">
-                                    <div className="flex-1">
-                                        <select
-                                            className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-1 focus:ring-blue-500"
-                                            value={ing.ingredient_item || ''}
-                                            onChange={(e) => handleIngredientChange(idx, 'ingredient_item', Number(e.target.value))}
+                            {recipeIngredients.map((ing, idx) => {
+                                const selectedItem = ingredientsList.find(i => i.id === ing.ingredient_item);
+                                const availableUnits = selectedItem ? [
+                                    { id: -1, unit_name: selectedItem.base_unit, factor: 1.0 },
+                                    ...(selectedItem.conversions || [])
+                                ] : [];
+
+                                return (
+                                    <div key={idx} className="flex gap-2 items-start">
+                                        <div className="flex-1">
+                                            <select
+                                                className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-1 focus:ring-blue-500"
+                                                value={ing.ingredient_item || ''}
+                                                onChange={(e) => handleIngredientChange(idx, 'ingredient_item', Number(e.target.value))}
+                                            >
+                                                <option value="0">Select Ingredient...</option>
+                                                {ingredientsList.map(i => (
+                                                    <option key={i.id} value={i.id}>{i.name} ({i.base_unit})</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="w-24">
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="0.01"
+                                                placeholder="Qty"
+                                                className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-1 focus:ring-blue-500"
+                                                value={ing.quantity_required || ''}
+                                                onChange={(e) => handleIngredientChange(idx, 'quantity_required', parseFloat(e.target.value))}
+                                            />
+                                        </div>
+                                        <div className="w-32">
+                                            <select
+                                                className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-1 focus:ring-blue-500"
+                                                disabled={!selectedItem}
+                                                value={ing.selected_unit_name || ''}
+                                                onChange={(e) => {
+                                                    const unit = availableUnits.find(u => u.unit_name === e.target.value);
+                                                    if (unit) {
+                                                        handleUnitChange(idx, unit.factor, unit.unit_name);
+                                                    }
+                                                }}
+                                            >
+                                                {!selectedItem && <option>Unit</option>}
+                                                {availableUnits.map((u, uIdx) => (
+                                                    <option key={uIdx} value={u.unit_name}>{u.unit_name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <button
+                                            onClick={() => handleRemoveIngredient(idx)}
+                                            className="p-2 text-red-500 hover:text-red-700"
                                         >
-                                            <option value="0">Select Ingredient...</option>
-                                            {ingredientsList.map(i => (
-                                                <option key={i.id} value={i.id}>{i.name} ({i.base_unit})</option>
-                                            ))}
-                                        </select>
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
                                     </div>
-                                    <div className="w-24">
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            placeholder="Qty"
-                                            className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-1 focus:ring-blue-500"
-                                            value={ing.quantity_required || ''}
-                                            onChange={(e) => handleIngredientChange(idx, 'quantity_required', parseFloat(e.target.value))}
-                                        />
-                                    </div>
-                                    <button
-                                        onClick={() => handleRemoveIngredient(idx)}
-                                        className="p-2 text-red-500 hover:text-red-700"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
 
                     {/* Steps */}
                     <div className="mb-4">
-                         <div className="flex justify-between items-center mb-4">
+                        <div className="flex justify-between items-center mb-4">
                             <h3 className="text-lg font-semibold text-gray-800">Directions</h3>
                             <button
                                 onClick={handleAddStep}

@@ -124,10 +124,11 @@ class RecipeSerializer(serializers.ModelSerializer):
 class ItemSerializer(serializers.ModelSerializer):
     par = serializers.SerializerMethodField()
     default_location = serializers.SerializerMethodField()
+    conversions = UnitConversionSerializer(many=True, read_only=True)
 
     class Meta:
         model = Item
-        fields = ['id', 'name', 'type', 'base_unit', 'shelf_life_days', 'par', 'default_location']
+        fields = ['id', 'name', 'type', 'base_unit', 'shelf_life_days', 'par', 'default_location', 'conversions']
 
     def get_par(self, obj):
         user = self.context.get('request').user if self.context.get('request') else None
