@@ -3,6 +3,9 @@ import { getRecipesList } from '../services/api';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useSwipeable } from 'react-swipeable';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../context/AuthContext';
+import CreateRecipeModal from '../components/CreateRecipeModal';
+import { Plus } from 'lucide-react';
 
 interface RecipeStepIngredient {
     id: number;
@@ -52,27 +55,31 @@ const RecipesPage: React.FC = () => {
     const [currentCardIndex, setCurrentCardIndex] = useState(0); // 0 = Overview, 1+ = Steps
     const [slideDirection, setSlideDirection] = useState(0);
 
-    useEffect(() => {
-        const fetchRecipes = async () => {
-            try {
-                const data = await getRecipesList();
-                setRecipes(data);
+    const { user } = useAuth();
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
-                // Check if ID in URL
-                if (recipeIdParam) {
-                    const found = data.find((r: Recipe) => r.id === parseInt(recipeIdParam));
-                    if (found) {
-                        setSelectedRecipe(found);
-                    }
-                }
-            } catch (err) {
-                console.error("Failed to fetch recipes", err);
-            } finally {
-                setLoading(false);
-            }
-        };
+    useEffect(() => {
         fetchRecipes();
     }, [recipeIdParam]); // Re-run if ID param changes (though mostly on mount)
+
+    const fetchRecipes = async () => {
+        try {
+            const data = await getRecipesList();
+            setRecipes(data);
+
+            // Check if ID in URL
+            if (recipeIdParam) {
+                const found = data.find((r: Recipe) => r.id === parseInt(recipeIdParam));
+                if (found) {
+                    setSelectedRecipe(found);
+                }
+            }
+        } catch (err) {
+            console.error("Failed to fetch recipes", err);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleSelectRecipe = (recipe: Recipe) => {
         setSelectedRecipe(recipe);
@@ -272,7 +279,24 @@ const RecipesPage: React.FC = () => {
     return (
         <div className="p-6 bg-gray-50 min-h-screen">
             <div className="max-w-6xl mx-auto">
-                <h1 className="text-2xl font-bold mb-6 text-gray-800">Recipes</h1>
+                <div className="flex justify-between items-center mb-6">
+                    <h1 className="text-2xl font-bold text-gray-800">Recipes</h1>
+                    {user?.role === 'admin' && (
+                        <button
+                            onClick={() => setIsCreateModalOpen(true)}
+                            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-sm font-medium"
+                        >
+                            <Plus className="w-5 h-5 mr-2" />
+                            Create Recipe
+                        </button>
+                    )}
+                </div>
+
+                <CreateRecipeModal
+                    isOpen={isCreateModalOpen}
+                    onClose={() => setIsCreateModalOpen(false)}
+                    onSuccess={fetchRecipes}
+                />
 
                 {recipes.length === 0 ? (
                     <div className="bg-white rounded-lg shadow-md p-12 text-center text-gray-500">

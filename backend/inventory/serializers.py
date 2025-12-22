@@ -76,12 +76,50 @@ class RecipeSerializer(serializers.ModelSerializer):
     item_name = serializers.CharField(source='item.name', read_only=True)
     base_unit = serializers.CharField(source='item.base_unit', read_only=True)
     yield_unit_details = UnitConversionSerializer(source='yield_unit', read_only=True)
-    steps = RecipeStepSerializer(many=True, read_only=True)
-    ingredients = RecipeIngredientSerializer(many=True, read_only=True)
+    steps = RecipeStepSerializer(many=True, required=False)
+    ingredients = RecipeIngredientSerializer(many=True, required=False)
 
     class Meta:
         model = Recipe
         fields = ['id', 'item', 'item_name', 'base_unit', 'yield_quantity', 'yield_unit', 'yield_unit_details', 'instructions', 'steps', 'ingredients']
+
+    def create(self, validated_data):
+        steps_data = validated_data.pop('steps', [])
+        ingredients_data = validated_data.pop('ingredients', [])
+        recipe = Recipe.objects.create(**validated_data)
+        
+        for step_data in steps_data:
+            # We don't support creating nested step ingredients here yet, just the step details
+            RecipeStep.objects.create(recipe=recipe, **step_data)
+        
+        for ingredient_data in ingredients_data:
+            RecipeIngredient.objects.create(recipe=recipe, **ingredient_data)
+            
+        return recipe
+
+    def update(self, instance, validated_data):
+        steps_data = validated_data.pop('steps', None)
+        ingredients_data = validated_data.pop('ingredients', None)
+        
+        # Update scalar fields
+        instance.yield_quantity = validated_data.get('yield_quantity', instance.yield_quantity)
+        instance.yield_unit = validated_data.get('yield_unit', instance.yield_unit)
+        instance.instructions = validated_data.get('instructions', instance.instructions)
+        instance.save()
+        
+        # Update Steps
+        if steps_data is not None:
+            instance.steps.all().delete()
+            for step_data in steps_data:
+                RecipeStep.objects.create(recipe=instance, **step_data)
+                
+        # Update Ingredients
+        if ingredients_data is not None:
+            instance.ingredients.all().delete()
+            for ingredient_data in ingredients_data:
+                RecipeIngredient.objects.create(recipe=instance, **ingredient_data)
+
+        return instance
 
 class ItemSerializer(serializers.ModelSerializer):
     par = serializers.SerializerMethodField()

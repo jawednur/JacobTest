@@ -176,4 +176,14 @@ export const getStores = async () => {
   return response.data.results || response.data;
 };
 
+export const createRecipe = async (data: any) => {
+  const response = await api.post('/inventory/recipes/', data);
+  return response.data;
+};
+
+export const updateRecipe = async (id: number, data: any) => {
+  const response = await api.patch(`/inventory/recipes/${id}/`, data);
+  return response.data;
+};
+
 export default api;
