@@ -77,3 +77,4 @@ npm run dev
 ## Documentation Standards
 This documentation and the recent refactoring follow best practices as verified by Context 7 (React & Django standards).
 
+

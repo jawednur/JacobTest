@@ -84,3 +84,4 @@ class ExpirationCalculationTestCase(TestCase):
         inv = Inventory.objects.get(store=self.store, item=item_no_expiry, location=self.location)
         self.assertIsNone(inv.expiration_date)
 
+
