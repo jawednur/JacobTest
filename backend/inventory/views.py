@@ -91,21 +91,8 @@ class ItemViewSet(viewsets.ModelViewSet):
             if par_value > 0 or location_id:
                 StoreItemSettings.objects.create(store=store, item=item, par=par_value, default_location_id=location_id)
             
-            # Auto-create recipe if type is product
-            if item.type == 'product':
-                Recipe.objects.create(
-                    item=item,
-                    yield_quantity=1.0, # Default yield
-                    instructions="Auto-generated recipe for product."
-                )
-        elif item.type == 'product':
-             # Global item that is a product - should it have a global recipe?
-             # Yes, usually.
-             Recipe.objects.create(
-                item=item,
-                yield_quantity=1.0,
-                instructions="Auto-generated recipe for product."
-             )
+            # Removed auto-create recipe logic to prevent duplicates when creating via CreateRecipeModal
+
 
 class RecipeViewSet(viewsets.ModelViewSet):
     """

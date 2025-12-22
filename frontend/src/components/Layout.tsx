@@ -81,22 +81,22 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             {/* Mobile Sidebar Overlay */}
             {isSidebarOpen && (
                 <div 
-                    className="fixed inset-0 bg-black bg-opacity-50 z-20 md:hidden"
+                    className="fixed inset-0 bg-black bg-opacity-50 z-20 lg:hidden"
                     onClick={() => setIsSidebarOpen(false)}
                 />
             )}
 
             {/* Sidebar */}
             <aside className={`
-                fixed md:static inset-y-0 left-0 z-30 w-64 bg-card shadow-lg flex flex-col transform transition-transform duration-300 ease-in-out
+                fixed lg:static inset-y-0 left-0 z-30 w-64 bg-card shadow-lg flex flex-col transform transition-transform duration-300 ease-in-out
                 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-                md:translate-x-0 md:flex
+                lg:translate-x-0 lg:flex
             `}>
-                <div className="p-6 flex items-center justify-between md:justify-center border-b border-neutral-light">
+                <div className="p-6 flex items-center justify-between lg:justify-center border-b border-neutral-light">
                     <img src={logo} alt="Toastique" className="h-10 w-auto" />
                     <button 
                         onClick={() => setIsSidebarOpen(false)}
-                        className="md:hidden text-gray-500 hover:text-gray-700"
+                        className="lg:hidden text-gray-500 hover:text-gray-700"
                     >
                         <X className="w-6 h-6" />
                     </button>
@@ -142,7 +142,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             </aside>
 
             {/* Mobile Header (visible only on small screens) */}
-            <div className="md:hidden fixed top-0 w-full bg-card shadow-sm z-10 p-4 flex justify-between items-center">
+            <div className="lg:hidden fixed top-0 w-full bg-card shadow-sm z-10 p-4 flex justify-between items-center">
                 <div className="flex items-center">
                     <button 
                         onClick={() => setIsSidebarOpen(true)}
@@ -158,7 +158,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             </div>
 
             {/* Main Content */}
-            <main className="flex-1 overflow-y-auto p-6 md:p-8 pt-20 md:pt-8 bg-background-alt w-full">
+            <main className="flex-1 overflow-y-auto p-6 md:p-8 pt-20 lg:pt-8 bg-background-alt w-full">
                 {children}
             </main>
         </div>

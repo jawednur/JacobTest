@@ -19,7 +19,13 @@ def create_mock_data():
     print(f"Store: {store.name}")
 
     # 2. Create Users
-    admin_user, _ = CustomUser.objects.get_or_create(username="admin", defaults={'email': 'admin@example.com', 'role': 'admin', 'store': store})
+    admin_user, _ = CustomUser.objects.get_or_create(username="admin", defaults={
+        'email': 'admin@example.com', 
+        'role': 'admin', 
+        'store': store,
+        'is_staff': True,
+        'is_superuser': True
+    })
     if not admin_user.check_password('admin'):
         admin_user.set_password('admin')
         admin_user.save()

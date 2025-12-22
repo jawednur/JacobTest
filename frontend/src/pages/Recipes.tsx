@@ -131,7 +131,7 @@ const RecipesPage: React.FC = () => {
     const swipeHandlers = useSwipeable({
         onSwipedLeft: handleNext,
         onSwipedRight: handlePrev,
-        preventScrollOnSwipe: true,
+        preventScrollOnSwipe: false,
         trackMouse: true
     });
 

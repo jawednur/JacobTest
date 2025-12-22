@@ -156,15 +156,7 @@ const StocktakePage: React.FC = () => {
     const swipeHandlers = useSwipeable({
         onSwipedLeft: () => handleNext(),
         onSwipedRight: () => handlePrev(),
-        onSwipedUp: () => {
-            const currentItem = items[currentItemIndex];
-            if (currentItem) handleIncrement(currentItem.id);
-        },
-        onSwipedDown: () => {
-            const currentItem = items[currentItemIndex];
-            if (currentItem) handleDecrement(currentItem.id);
-        },
-        preventScrollOnSwipe: true, // Prevent scrolling while swiping
+        preventScrollOnSwipe: false,
         trackMouse: true
     });
 
@@ -342,29 +334,35 @@ const StocktakePage: React.FC = () => {
 
                                     <div>
                                         <h3 className="text-2xl font-bold text-gray-900 mb-2">{currentItem.name}</h3>
-                                        <p className="text-gray-500 text-sm uppercase tracking-wide font-semibold">
-                                            Swipe Up/Down to Adjust
-                                        </p>
+                                        {/* Removed confusing swipe instruction */}
                                     </div>
 
                                     {/* Quantity Display */}
                                     <div className="flex flex-col items-center">
                                         <button
                                             onClick={() => handleIncrement(currentItem.id)}
-                                            className="p-2 text-gray-300 hover:text-blue-500 transition mb-2"
+                                            className="p-4 text-gray-400 hover:text-blue-600 transition mb-2 focus:outline-none active:scale-95 transform"
+                                            aria-label="Increase Quantity"
                                         >
-                                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                                            <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 15l7-7 7 7" /></svg>
                                         </button>
 
-                                        <div className="text-6xl font-black text-blue-600 tabular-nums">
-                                            {currentCount.actual_quantity || '0'}
-                                        </div>
+                                        <input
+                                            type="number"
+                                            inputMode="decimal"
+                                            value={currentCount.actual_quantity || ''}
+                                            onChange={(e) => handleQuantityChange(currentItem.id, e.target.value)}
+                                            placeholder="0"
+                                            className="text-6xl font-black text-blue-600 text-center w-full bg-transparent border-none focus:ring-0 p-0 m-0"
+                                            style={{ appearance: 'textfield', MozAppearance: 'textfield' }} // Hide spinner arrows
+                                        />
 
                                         <button
                                             onClick={() => handleDecrement(currentItem.id)}
-                                            className="p-2 text-gray-300 hover:text-blue-500 transition mt-2"
+                                            className="p-4 text-gray-400 hover:text-blue-600 transition mt-2 focus:outline-none active:scale-95 transform"
+                                            aria-label="Decrease Quantity"
                                         >
-                                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                                            <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
                                         </button>
                                     </div>
 
@@ -387,23 +385,36 @@ const StocktakePage: React.FC = () => {
                                 </div>
 
                                 {/* Navigation Hints */}
-                                <div className="bg-gray-50 p-4 flex justify-between text-gray-400 text-sm font-medium border-t border-gray-100">
-                                    <div className="flex items-center">
-                                        {currentItemIndex > 0 && (
-                                            <>
-                                                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-                                                Prev
-                                            </>
-                                        )}
+                                <div className="bg-gray-50 p-0 flex justify-between text-gray-400 text-sm font-medium border-t border-gray-100 h-16">
+                                    <div className="flex-1 flex items-center justify-start pl-4 border-r border-gray-100">
+                                        {currentItemIndex > 0 ? (
+                                            <button 
+                                                onClick={handlePrev}
+                                                className="flex items-center text-gray-600 hover:text-blue-600 transition px-4 py-2 rounded-lg hover:bg-blue-50 w-full h-full justify-start"
+                                            >
+                                                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                                                Previous
+                                            </button>
+                                        ) : <div className="w-full"></div>}
                                     </div>
-                                    <div className="flex items-center">
+                                    <div className="flex-1 flex items-center justify-end pr-4">
                                         {currentItemIndex < items.length - 1 ? (
-                                            <>
-                                                Next
-                                                <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                                            </>
+                                            <button 
+                                                onClick={handleNext}
+                                                className="flex items-center text-gray-600 hover:text-blue-600 transition px-4 py-2 rounded-lg hover:bg-blue-50 w-full h-full justify-end"
+                                            >
+                                                Next Item
+                                                <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                                            </button>
                                         ) : (
-                                            <span className="text-blue-500">End</span>
+                                            <button 
+                                                onClick={submitLocationCounts}
+                                                disabled={submitting}
+                                                className="flex items-center text-blue-600 hover:text-blue-700 transition px-4 py-2 rounded-lg hover:bg-blue-50 w-full h-full justify-end font-bold"
+                                            >
+                                                Finish
+                                                <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                            </button>
                                         )}
                                     </div>
                                 </div>
