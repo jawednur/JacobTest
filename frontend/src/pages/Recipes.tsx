@@ -41,6 +41,47 @@ interface Recipe {
     ingredients: RecipeIngredient[];
 }
 
+// Helper to format decimal as fraction
+const formatQuantity = (val: number): string => {
+    if (val === 0) return "0";
+
+    // Check if close to whole number
+    if (Math.abs(val - Math.round(val)) < 0.01) {
+        return Math.round(val).toString();
+    }
+
+    const whole = Math.floor(val);
+    const decimal = val - whole;
+
+    // Common fraction mapping
+    const fractions: { [key: string]: string } = {
+        "0.25": "1/4",
+        "0.33": "1/3",
+        "0.5": "1/2",
+        "0.66": "2/3",
+        "0.75": "3/4"
+    };
+
+    // Find closest fraction
+    let bestFraction = "";
+    let minDiff = 0.04; // Tolerance
+
+    for (const [decStr, fracStr] of Object.entries(fractions)) {
+        const dec = parseFloat(decStr);
+        if (Math.abs(decimal - dec) < minDiff) {
+            bestFraction = fracStr;
+            break;
+        }
+    }
+
+    if (bestFraction) {
+        return whole > 0 ? `${whole} ${bestFraction}` : bestFraction;
+    }
+
+    // Default to 2 decimals if no common fraction match
+    return val.toFixed(2).replace(/\.00$/, '');
+};
+
 const RecipesPage: React.FC = () => {
     const [recipes, setRecipes] = useState<Recipe[]>([]);
     const [loading, setLoading] = useState(true);
@@ -50,6 +91,7 @@ const RecipesPage: React.FC = () => {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const recipeIdParam = searchParams.get('id');
+    const returnToProduction = searchParams.get('returnToProduction') === 'true'; // Check if we should return
 
     // Swipeable Card State
     const [currentCardIndex, setCurrentCardIndex] = useState(0); // 0 = Overview, 1+ = Steps
@@ -90,8 +132,13 @@ const RecipesPage: React.FC = () => {
     };
 
     const handleBack = () => {
-        setSelectedRecipe(null);
-        navigate('/recipes'); // clear query param
+        if (returnToProduction && selectedRecipe) {
+            // Navigate back to production page with pre-filled item
+            navigate(`/production?recipeId=${selectedRecipe.id}`);
+        } else {
+            setSelectedRecipe(null);
+            navigate('/recipes'); // clear query param
+        }
     };
 
     const handleDeleteRecipe = async (e: React.MouseEvent, recipeId: number) => {
@@ -207,7 +254,7 @@ const RecipesPage: React.FC = () => {
                                                             )}
                                                         </div>
                                                         <span className="bg-gray-100 text-gray-800 font-bold px-2 py-1 rounded">
-                                                            {ing.display_quantity} {ing.display_unit}
+                                                            {formatQuantity(ing.display_quantity)} {ing.display_unit}
                                                         </span>
                                                     </li>
                                                 ))}
@@ -279,13 +326,22 @@ const RecipesPage: React.FC = () => {
                         >
                             ← Prev
                         </button>
-                        <button
-                            onClick={handleNext}
-                            disabled={currentCardIndex === totalCards - 1}
-                            className="bg-blue-600 px-6 py-2 rounded shadow text-white disabled:opacity-50 hover:bg-blue-700 font-bold border border-black"
-                        >
-                            {currentCardIndex === totalCards - 1 ? "Done" : "Next →"}
-                        </button>
+
+                        {currentCardIndex === totalCards - 1 ? (
+                            <button
+                                onClick={handleBack}
+                                className="bg-green-600 px-6 py-2 rounded shadow text-white hover:bg-green-700 font-bold border border-black"
+                            >
+                                {returnToProduction ? "Log Production" : "Done"}
+                            </button>
+                        ) : (
+                            <button
+                                onClick={handleNext}
+                                className="bg-blue-600 px-6 py-2 rounded shadow text-white hover:bg-blue-700 font-bold border border-black"
+                            >
+                                Next →
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>

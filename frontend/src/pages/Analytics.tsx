@@ -4,7 +4,7 @@ import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     BarChart, Bar, Cell
 } from 'recharts';
-import { Loader2, TrendingUp, Package, Utensils } from 'lucide-react';
+import { Loader2, TrendingUp, Package, Utensils, Trash2 } from 'lucide-react';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
@@ -12,6 +12,10 @@ const Analytics: React.FC = () => {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    // Pagination for Waste Table
+    const [wastePage, setWastePage] = useState(1);
+    const ITEMS_PER_PAGE = 3;
 
     useEffect(() => {
         fetchAnalytics();
@@ -152,7 +156,9 @@ const Analytics: React.FC = () => {
                                     <tr key={idx} className="hover:bg-gray-50">
                                         <td className="p-3 text-gray-800">{item.item__name}</td>
                                         <td className="p-3 text-right font-medium text-gray-600">
-                                            {item.total_quantity}
+                                            {typeof item.total_quantity === 'number'
+                                                ? item.total_quantity.toFixed(2)
+                                                : item.total_quantity}
                                         </td>
                                         <td className="p-3 text-right text-xs text-gray-400">
                                             {item.item__base_unit}
@@ -201,6 +207,70 @@ const Analytics: React.FC = () => {
                         </tbody>
                     </table>
                 </div>
+            </div>
+
+            {/* Waste / Expired Items Table */}
+            <div className="bg-card rounded-xl shadow-sm p-6 border border-neutral-light">
+                <div className="flex items-center mb-4">
+                    <Trash2 className="w-5 h-5 text-red-500 mr-2" />
+                    <h2 className="text-lg font-semibold text-charcoal">Expired / Waste (Last 30 Days)</h2>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-gray-50 text-gray-500 border-b border-gray-200">
+                            <tr>
+                                <th className="p-3 font-medium">Item</th>
+                                <th className="p-3 font-medium text-right">Total Wasted</th>
+                                <th className="p-3 font-medium text-right">Unit</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {data.expired_waste
+                                ?.slice((wastePage - 1) * ITEMS_PER_PAGE, wastePage * ITEMS_PER_PAGE)
+                                .map((waste: any, idx: number) => (
+                                    <tr key={idx} className="hover:bg-gray-50">
+                                        <td className="p-3 text-gray-800 font-medium">{waste.name}</td>
+                                        <td className="p-3 text-right text-gray-600">
+                                            {typeof waste.total_expired === 'number'
+                                                ? waste.total_expired.toFixed(2)
+                                                : waste.total_expired}
+                                        </td>
+                                        <td className="p-3 text-right text-gray-500">{waste.unit}</td>
+                                    </tr>
+                                ))}
+                            {(!data.expired_waste || data.expired_waste.length === 0) && (
+                                <tr>
+                                    <td colSpan={3} className="p-4 text-center text-gray-400">No waste data available.</td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* Pagination Controls */}
+                {data.expired_waste && data.expired_waste.length > ITEMS_PER_PAGE && (
+                    <div className="flex justify-between items-center mt-4 text-sm text-gray-600">
+                        <div>
+                            Showing {(wastePage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(wastePage * ITEMS_PER_PAGE, data.expired_waste.length)} of {data.expired_waste.length} entries
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setWastePage(p => Math.max(1, p - 1))}
+                                disabled={wastePage === 1}
+                                className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Previous
+                            </button>
+                            <button
+                                onClick={() => setWastePage(p => Math.min(Math.ceil(data.expired_waste.length / ITEMS_PER_PAGE), p + 1))}
+                                disabled={wastePage >= Math.ceil(data.expired_waste.length / ITEMS_PER_PAGE)}
+                                className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

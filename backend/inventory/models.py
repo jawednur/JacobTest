@@ -36,15 +36,26 @@ class Item(models.Model):
     def get_display_quantity_and_unit(self, quantity):
         """
         Converts a quantity in base units to the largest suitable display unit.
+        Prioritizes 'is_default_display' conversion if set.
         """
-        # Fetch conversions sorted by factor descending to try largest units first
+        if quantity == 0:
+            return 0, self.base_unit
+
+        # 1. Check for Default Display Unit
+        default_conversion = self.conversions.filter(is_default_display=True).first()
+        if default_conversion and default_conversion.factor > 0:
+             return quantity / default_conversion.factor, default_conversion.unit_name
+
+        # 2. Fetch conversions sorted by factor descending to try largest units first
         conversions = self.conversions.all().order_by('-factor')
         
         for conversion in conversions:
-            if conversion.factor > 0 and quantity >= conversion.factor:
-                # If quantity is large enough to be at least 1 of this unit
-                converted_qty = quantity / conversion.factor
-                return converted_qty, conversion.unit_name
+            if conversion.factor > 0:
+                val = quantity / conversion.factor
+                # Allow fractional units if it's at least 0.25 (e.g. 1/4 cup)
+                # This prevents "100g" being shown as "0.0001 tons" but allows "0.5 kg" or "0.8 cups"
+                if val >= 0.25: 
+                    return val, conversion.unit_name
         
         # Fallback to base unit
         return quantity, self.base_unit

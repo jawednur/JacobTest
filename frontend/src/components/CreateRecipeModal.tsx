@@ -19,9 +19,51 @@ interface Item {
 interface IngredientInput {
     ingredient_item: number; // Item ID
     quantity_required: number; // Raw input quantity
+    quantity_input: string; // Display input quantity
     selected_unit_factor: number; // 1 for base unit, >1 for conversions
     selected_unit_name: string;
 }
+
+// Helper to parse quantities including fractions and mixed numbers
+const parseQuantity = (value: string): number => {
+    if (!value) return 0;
+    const cleanValue = value.toString().trim();
+
+    // Handle mixed numbers like "1 1/2"
+    if (cleanValue.includes(' ')) {
+        const parts = cleanValue.split(' ');
+        if (parts.length === 2) {
+            const whole = parseFloat(parts[0]);
+            const fraction = parts[1];
+            if (!isNaN(whole) && fraction.includes('/')) {
+                const fractionParts = fraction.split('/');
+                if (fractionParts.length === 2) {
+                    const numerator = parseFloat(fractionParts[0]);
+                    const denominator = parseFloat(fractionParts[1]);
+                    if (!isNaN(numerator) && !isNaN(denominator) && denominator !== 0) {
+                        return whole + (numerator / denominator);
+                    }
+                }
+            }
+        }
+    }
+
+    // Handle fractions like "1/3"
+    if (cleanValue.includes('/')) {
+        const parts = cleanValue.split('/');
+        if (parts.length === 2) {
+            const numerator = parseFloat(parts[0]);
+            const denominator = parseFloat(parts[1]);
+            if (!isNaN(numerator) && !isNaN(denominator) && denominator !== 0) {
+                return numerator / denominator;
+            }
+        }
+    }
+
+    // Handle standard numbers
+    const parsed = parseFloat(cleanValue);
+    return isNaN(parsed) ? 0 : parsed;
+};
 
 interface StepInput {
     step_number: number;
@@ -75,6 +117,7 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
         setRecipeIngredients([...recipeIngredients, {
             ingredient_item: 0,
             quantity_required: 0,
+            quantity_input: '',
             selected_unit_factor: 1,
             selected_unit_name: ''
         }]);
@@ -108,6 +151,13 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
                     selected_unit_name: ''
                 };
             }
+        } else if (field === 'quantity_input') {
+            const val = value as string;
+            newIngredients[index] = {
+                ...currentIng,
+                quantity_input: val,
+                quantity_required: parseQuantity(val)
+            };
         } else {
             newIngredients[index] = { ...currentIng, [field]: value };
         }
@@ -151,6 +201,7 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
             let targetItemId = selectedProductId;
 
             if (isNewProduct) {
+                console.log("Creating new product:", { name: newProductName, unit: newProductUnit, shelfLife });
                 // Create the product first
                 const newItem = await createItem({
                     name: newProductName,
@@ -168,25 +219,41 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
                 return;
             }
 
+            const ingredientsPayload = recipeIngredients
+                .filter(i => i.ingredient_item !== 0 && i.quantity_required > 0)
+                .map(i => ({
+                    ingredient_item: i.ingredient_item,
+                    // Convert to base units for backend
+                    quantity_required: i.quantity_required * i.selected_unit_factor
+                }));
+
+            if (recipeIngredients.length > 0 && ingredientsPayload.length === 0) {
+                alert("Please ensure all ingredients have a valid item and quantity greater than 0.");
+                setLoading(false);
+                return;
+            }
+
             const recipeData = {
                 item: targetItemId,
                 yield_quantity: yieldQuantity,
-                ingredients: recipeIngredients
-                    .filter(i => i.ingredient_item !== 0 && i.quantity_required > 0)
-                    .map(i => ({
-                        ingredient_item: i.ingredient_item,
-                        // Convert to base units for backend
-                        quantity_required: i.quantity_required * i.selected_unit_factor
-                    })),
+                ingredients: ingredientsPayload,
                 steps: steps.filter(s => s.instruction.trim() !== '')
             };
 
+            console.log("Submitting recipe data:", JSON.stringify(recipeData, null, 2));
+
             await createRecipe(recipeData);
+            console.log("Recipe created successfully");
             onSuccess();
             onClose();
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error creating recipe", error);
-            alert("Failed to create recipe. It might already exist for this item.");
+            if (error.response) {
+                console.error("Server response:", error.response.data);
+                alert(`Failed to create recipe: ${JSON.stringify(error.response.data)}`);
+            } else {
+                alert("Failed to create recipe. It might already exist for this item.");
+            }
         } finally {
             setLoading(false);
         }
@@ -332,13 +399,11 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
                                         </div>
                                         <div className="w-24">
                                             <input
-                                                type="number"
-                                                min="0"
-                                                step="0.01"
+                                                type="text"
                                                 placeholder="Qty"
                                                 className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-1 focus:ring-blue-500"
-                                                value={ing.quantity_required || ''}
-                                                onChange={(e) => handleIngredientChange(idx, 'quantity_required', parseFloat(e.target.value))}
+                                                value={ing.quantity_input || ''}
+                                                onChange={(e) => handleIngredientChange(idx, 'quantity_input', e.target.value)}
                                             />
                                         </div>
                                         <div className="w-32">

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getLocations, createProductionLog, getRecipesList, getItemConversions } from '../services/api';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const ProductionLogPage: React.FC = () => {
   const [locations, setLocations] = useState<any[]>([]);
@@ -8,6 +8,8 @@ const ProductionLogPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
 
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialRecipeId = searchParams.get('recipeId');
 
   // Form
   const [selectedItem, setSelectedItem] = useState('');
@@ -26,6 +28,13 @@ const ProductionLogPage: React.FC = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Handle URL param for pre-selection
+  useEffect(() => {
+    if (initialRecipeId && recipes.length > 0) {
+        handleItemChange(initialRecipeId);
+    }
+  }, [initialRecipeId, recipes]);
 
   const loadData = async () => {
     try {
@@ -142,7 +151,7 @@ const ProductionLogPage: React.FC = () => {
           {/* New Styled Recipe Link */}
           {selectedRecipe && (
             <div
-              onClick={() => navigate(`/recipes?id=${selectedRecipe.id}`)}
+              onClick={() => navigate(`/recipes?id=${selectedRecipe.id}&returnToProduction=true`)}
               className="bg-blue-50 border border-blue-200 rounded-lg p-4 cursor-pointer hover:bg-blue-100 transition flex items-center justify-between group"
             >
               <div className="flex items-center">

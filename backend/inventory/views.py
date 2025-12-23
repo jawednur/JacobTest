@@ -41,6 +41,17 @@ class ItemViewSet(viewsets.ModelViewSet):
         user = self.request.user
         store = getattr(user, 'store', None)
         
+        # Backfill expiration dates if shelf life is set and inventory is missing it
+        if item.shelf_life_days is not None:
+             from .models import Inventory
+             from datetime import timedelta
+             from django.utils import timezone
+             
+             # Update all inventory for this item that lacks an expiration date
+             # Set to now + shelf life (Best effort correction)
+             new_expiry = timezone.now() + timedelta(days=item.shelf_life_days)
+             Inventory.objects.filter(item=item, expiration_date__isnull=True).update(expiration_date=new_expiry)
+        
         # Handle 'par' updates
         if store and 'par' in self.request.data:
             try:
@@ -712,11 +723,35 @@ class AnalyticsView(APIView):
         
         current_stock.sort(key=lambda x: x['total_quantity'], reverse=True)
 
+        # 5. Expired Items (Waste - Last 30 Days)
+        expired_logs = ExpiredItemLog.objects.filter(
+            store=store,
+            disposed_at__date__gte=start_date
+        ).select_related('item')
+        
+        waste_map = {}
+        for log in expired_logs:
+            name = log.item.name
+            if name not in waste_map:
+                waste_map[name] = {'quantity': 0.0, 'item': log.item}
+            waste_map[name]['quantity'] += log.quantity_expired
+
+        waste_summary = []
+        for name, data in waste_map.items():
+            qty, unit = data['item'].get_display_quantity_and_unit(data['quantity'])
+            waste_summary.append({
+                'name': name,
+                'total_expired': qty,
+                'unit': unit
+            })
+        waste_summary.sort(key=lambda x: x['total_expired'], reverse=True)
+
         data = {
             "production_trends": formatted_trends, # Now Sales Trends
             "popular_products": popular_products_formatted, # Now Popular Sales
             "ingredient_usage": formatted_usage, # Now usage based on Sales
-            "current_stock": current_stock
+            "current_stock": current_stock,
+            "expired_waste": waste_summary
         }
         
         return Response(data)

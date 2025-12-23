@@ -52,78 +52,84 @@ const DashboardDispatcher: React.FC = () => {
     return <Dashboard />; // Default/Admin
 };
 
+const AppRoutes: React.FC = () => {
+    return (
+        <Routes>
+            <Route path="/login" element={<Login />} />
+
+            {/* Protected Routes */}
+            <Route path="/" element={
+                <ProtectedRoute>
+                    <Layout>
+                        <DashboardDispatcher />
+                    </Layout>
+                </ProtectedRoute>
+            } />
+
+            <Route path="/inventory" element={
+                <ProtectedRoute allowedRoles={['admin', 'it']}>
+                    <Layout>
+                        <InventoryPage />
+                    </Layout>
+                </ProtectedRoute>
+            } />
+
+            <Route path="/analytics" element={
+                <ProtectedRoute allowedRoles={['admin', 'it']}>
+                    <Layout>
+                        <AnalyticsPage />
+                    </Layout>
+                </ProtectedRoute>
+            } />
+
+            <Route path="/items" element={
+                <ProtectedRoute allowedRoles={['admin', 'it']}>
+                    <Layout>
+                        <ItemsPage />
+                    </Layout>
+                </ProtectedRoute>
+            } />
+
+            <Route path="/unit-conversions" element={
+                <ProtectedRoute allowedRoles={['admin', 'it']}>
+                    <Layout>
+                        <UnitConversionsPage />
+                    </Layout>
+                </ProtectedRoute>
+            } />
+
+            <Route path="/recipes" element={
+                <ProtectedRoute>
+                    <Layout>
+                        <RecipesPage />
+                    </Layout>
+                </ProtectedRoute>
+            } />
+
+            <Route path="/production" element={
+                <ProtectedRoute>
+                    <Layout>
+                        <ProductionLogPage />
+                    </Layout>
+                </ProtectedRoute>
+            } />
+
+            <Route path="/stocktake" element={
+                <ProtectedRoute allowedRoles={['admin', 'it']}>
+                    <Layout>
+                        <StocktakePage />
+                    </Layout>
+                </ProtectedRoute>
+            } />
+        </Routes>
+    );
+};
+
 function App() {
     return (
         <AuthProvider>
             <Router>
-                <Routes>
-                    <Route path="/login" element={<Login />} />
-
-                    {/* Protected Routes */}
-                    <Route path="/" element={
-                        <ProtectedRoute>
-                            <Layout>
-                                <DashboardDispatcher />
-                            </Layout>
-                        </ProtectedRoute>
-                    } />
-
-                    <Route path="/inventory" element={
-                        <ProtectedRoute allowedRoles={['admin', 'it']}>
-                            <Layout>
-                                <InventoryPage />
-                            </Layout>
-                        </ProtectedRoute>
-                    } />
-
-                    <Route path="/analytics" element={
-                        <ProtectedRoute allowedRoles={['admin', 'it']}>
-                            <Layout>
-                                <AnalyticsPage />
-                            </Layout>
-                        </ProtectedRoute>
-                    } />
-
-                    <Route path="/items" element={
-                        <ProtectedRoute allowedRoles={['admin', 'it']}>
-                            <Layout>
-                                <ItemsPage />
-                            </Layout>
-                        </ProtectedRoute>
-                    } />
-
-                    <Route path="/unit-conversions" element={
-                        <ProtectedRoute allowedRoles={['admin', 'it']}>
-                            <Layout>
-                                <UnitConversionsPage />
-                            </Layout>
-                        </ProtectedRoute>
-                    } />
-
-                    <Route path="/recipes" element={
-                        <ProtectedRoute>
-                            <Layout>
-                                <RecipesPage />
-                            </Layout>
-                        </ProtectedRoute>
-                    } />
-
-                    <Route path="/production" element={
-                        <ProtectedRoute>
-                            <Layout>
-                                <ProductionLogPage />
-                            </Layout>
-                        </ProtectedRoute>
-                    } />
-
-                    <Route path="/stocktake" element={
-                        <ProtectedRoute allowedRoles={['admin', 'it']}>
-                            <Layout>
-                                <StocktakePage />
-                            </Layout>
-                        </ProtectedRoute>
-                    } />
-                </Routes>
+                <AppRoutes />
             </Router>
         </AuthProvider>
     );

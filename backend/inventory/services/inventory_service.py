@@ -44,7 +44,7 @@ class InventoryService:
             defaults={'quantity': 0}
         )
         
-        if item.shelf_life_days is not None and (created or inventory.quantity == 0):
+        if item.shelf_life_days is not None and (created or inventory.quantity == 0 or inventory.expiration_date is None):
              inventory.expiration_date = timezone.now() + timedelta(days=item.shelf_life_days)
 
         inventory.quantity = F('quantity') + quantity
@@ -213,6 +213,17 @@ class InventoryService:
                         location_id=location_id
                     )
                     expected_quantity = inventory.quantity
+                    
+                    # Auto-set expiration if missing and item has shelf life
+                    if inventory.expiration_date is None:
+                         # Ensure we have the item
+                         try:
+                             item_obj = Item.objects.get(id=item_id)
+                             if item_obj.shelf_life_days is not None:
+                                 inventory.expiration_date = timezone.now() + timedelta(days=item_obj.shelf_life_days)
+                         except Item.DoesNotExist:
+                             pass
+
                 except Inventory.DoesNotExist:
                     expected_quantity = 0.0
                     try:

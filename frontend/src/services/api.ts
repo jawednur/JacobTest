@@ -57,18 +57,53 @@ export const updateItem = async (id: number, itemData: any) => {
 };
 
 export const getRecipesList = async () => {
-  const response = await api.get('/inventory/recipes/');
-  return response.data.results;
+  let results: any[] = [];
+  let url: string | null = '/inventory/recipes/';
+
+  while (url) {
+    const response: any = await api.get(url);
+    const data: any = response.data;
+
+    if (Array.isArray(data)) {
+      return data;
+    }
+
+    if (data.results) {
+      results = [...results, ...data.results];
+      url = data.next;
+    } else {
+      break;
+    }
+  }
+  return results;
 };
 
 export const getFullInventory = async (typeFilter?: string) => {
+  let results: any[] = [];
   let url = '/inventory/inventory/';
-  // Only append param if typeFilter is a non-empty string
+
+  // Append filter to initial URL
   if (typeFilter && typeFilter.length > 0) {
     url += `?item__type=${typeFilter}`;
   }
-  const response = await api.get(url);
-  return response.data.results || response.data; // Handle pagination if present, but default to array if viewset uses simple list
+
+  while (url) {
+    const response: any = await api.get(url);
+    const data = response.data;
+
+    if (Array.isArray(data)) {
+      return data; // Not paginated
+    }
+
+    if (data.results) {
+      results = [...results, ...data.results];
+      url = data.next; // Follow pagination
+    } else {
+      break;
+    }
+  }
+
+  return results;
 };
 
 export const getRecipes = async () => {

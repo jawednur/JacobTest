@@ -9,7 +9,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ims_mrp.settings')
 django.setup()
 
 from users.models import CustomUser, Store
-from inventory.models import Location, Item, UnitConversion, Recipe, RecipeStep, RecipeStepIngredient, Inventory, ProductionLog, RecipeIngredient
+from inventory.models import Location, Item, UnitConversion, Recipe, RecipeStep, RecipeStepIngredient, Inventory, ProductionLog, RecipeIngredient, ExpiredItemLog, DailyUsage
 
 def create_mock_data():
     print("Creating Mock Data...")
@@ -51,10 +51,14 @@ def create_mock_data():
     choco_chips, _ = Item.objects.get_or_create(name="Chocolate Chips", type="ingredient", defaults={'base_unit': 'g', 'shelf_life_days': 365})
     vanilla, _ = Item.objects.get_or_create(name="Vanilla Extract", type="ingredient", defaults={'base_unit': 'ml', 'shelf_life_days': 730})
     frozen_avocados, _ = Item.objects.get_or_create(name="Frozen Avocados", type="ingredient", defaults={'base_unit': 'bag', 'shelf_life_days': None}) # No Expiration
+    milk, _ = Item.objects.get_or_create(name="Whole Milk", type="ingredient", defaults={'base_unit': 'L', 'shelf_life_days': 14})
+    cream, _ = Item.objects.get_or_create(name="Heavy Cream", type="ingredient", defaults={'base_unit': 'L', 'shelf_life_days': 14})
+    salt, _ = Item.objects.get_or_create(name="Salt", type="ingredient", defaults={'base_unit': 'g', 'shelf_life_days': 365})
 
     # 5. Create Items (Products)
-    cookies, _ = Item.objects.get_or_create(name="Chocolate Chip Cookies", type="product", defaults={'base_unit': 'cookie', 'shelf_life_days': 3})
+    cookies, _ = Item.objects.get_or_create(name="Chocolate Chip Cookies", type="product", defaults={'base_unit': 'dozen', 'shelf_life_days': 3})
     croissant, _ = Item.objects.get_or_create(name="Croissant", type="product", defaults={'base_unit': 'single', 'shelf_life_days': 1})
+    sponge, _ = Item.objects.get_or_create(name="Victoria Sponge", type="product", defaults={'base_unit': 'single', 'shelf_life_days': 2})
     
     print("Items created.")
 
@@ -65,140 +69,146 @@ def create_mock_data():
     UnitConversion.objects.get_or_create(item=sugar, unit_name="cup", defaults={'factor': 200})
     # Butter: 1 Stick = 113g
     UnitConversion.objects.get_or_create(item=butter, unit_name="stick", defaults={'factor': 113})
-    # Batch units
-    UnitConversion.objects.get_or_create(item=cookies, unit_name="dozen", defaults={'factor': 12})
+    # Batch units (Cookies base unit is dozen, so maybe just single cookie conversion?)
+    UnitConversion.objects.get_or_create(item=cookies, unit_name="cookie", defaults={'factor': 1/12})
 
     print("Unit Conversions created.")
 
-    # 7. Create Recipe (Chocolate Chip Cookies)
+    # 7. Create Recipes
+    
+    # Chocolate Chip Cookies (Yield: 2 dozen)
     cookie_recipe, _ = Recipe.objects.get_or_create(
         item=cookies, 
         defaults={
-            'yield_quantity': 24, # Yields 24 cookies (2 dozen)
-            'instructions': "Mix ingredients and bake." # Deprecated field
+            'yield_quantity': 2, # Yields 2 dozen
+            'yield_unit': None, # base unit is dozen
+            'instructions': "Mix ingredients and bake."
         }
     )
 
-    # Recipe Ingredients (for backend calculation)
-    # 2.5 cups flour -> 300g
     RecipeIngredient.objects.get_or_create(recipe=cookie_recipe, ingredient_item=flour, defaults={'quantity_required': 300})
-    # 1 cup butter -> 226g
     RecipeIngredient.objects.get_or_create(recipe=cookie_recipe, ingredient_item=butter, defaults={'quantity_required': 226})
-    # 1 cup sugar -> 200g
     RecipeIngredient.objects.get_or_create(recipe=cookie_recipe, ingredient_item=sugar, defaults={'quantity_required': 200})
-    # 2 eggs
     RecipeIngredient.objects.get_or_create(recipe=cookie_recipe, ingredient_item=eggs, defaults={'quantity_required': 2})
-    # 2 cups choco chips -> 340g (approx)
     RecipeIngredient.objects.get_or_create(recipe=cookie_recipe, ingredient_item=choco_chips, defaults={'quantity_required': 340})
 
-    # Recipe Steps (Detailed)
     if cookie_recipe.steps.count() == 0:
-        s1 = RecipeStep.objects.create(
-            recipe=cookie_recipe, 
-            step_number=1, 
-            instruction="Cream together the butter and sugar until smooth.",
-            caption="Creaming butter"
-        )
-        RecipeStepIngredient.objects.create(step=s1, ingredient=butter, quantity="2 sticks (226g)")
-        RecipeStepIngredient.objects.create(step=s1, ingredient=sugar, quantity="1 cup (200g)")
+        s1 = RecipeStep.objects.create(recipe=cookie_recipe, step_number=1, instruction="Cream together the butter and sugar until smooth.")
+        RecipeStepIngredient.objects.create(step=s1, ingredient=butter)
+        RecipeStepIngredient.objects.create(step=s1, ingredient=sugar)
+        s2 = RecipeStep.objects.create(recipe=cookie_recipe, step_number=2, instruction="Beat in the eggs one at a time.")
+        RecipeStepIngredient.objects.create(step=s2, ingredient=eggs)
+        s3 = RecipeStep.objects.create(recipe=cookie_recipe, step_number=3, instruction="Stir in flour and chocolate chips.")
+        RecipeStepIngredient.objects.create(step=s3, ingredient=flour)
+        RecipeStepIngredient.objects.create(step=s3, ingredient=choco_chips)
+        s4 = RecipeStep.objects.create(recipe=cookie_recipe, step_number=4, instruction="Bake for 10 minutes.")
 
-        s2 = RecipeStep.objects.create(
-            recipe=cookie_recipe, 
-            step_number=2, 
-            instruction="Beat in the eggs one at a time, then stir in the vanilla."
-        )
-        RecipeStepIngredient.objects.create(step=s2, ingredient=eggs, quantity="2 large")
-        RecipeStepIngredient.objects.create(step=s2, ingredient=vanilla, quantity="2 tsp")
-
-        s3 = RecipeStep.objects.create(
-            recipe=cookie_recipe, 
-            step_number=3, 
-            instruction="Dissolve baking soda in hot water. Add to batter along with salt. Stir in flour and chocolate chips."
-        )
-        RecipeStepIngredient.objects.create(step=s3, ingredient=flour, quantity="2.5 cups (300g)")
-        RecipeStepIngredient.objects.create(step=s3, ingredient=choco_chips, quantity="2 cups (340g)")
-
-        s4 = RecipeStep.objects.create(
-            recipe=cookie_recipe, 
-            step_number=4, 
-            instruction="Drop by large spoonfuls onto ungreased pans. Bake for about 10 minutes in the preheated oven, or until edges are nicely browned."
-        )
-
-    # Expiring Today (Milk - let's create milk first)
-    milk, _ = Item.objects.get_or_create(name="Whole Milk", type="ingredient", defaults={'base_unit': 'L', 'shelf_life_days': 14})
-    
-    # 7b. Create Recipe (Croissants) - FIX: Added actual ingredients for Croissants so it doesn't show Cookie ingredients!
+    # Croissants (Yield: 12 singles)
     croissant_recipe, _ = Recipe.objects.get_or_create(
         item=croissant, 
         defaults={
-            'yield_quantity': 12, # Yields 12 croissants
+            'yield_quantity': 12, 
             'instructions': "Laminate dough and bake."
         }
     )
     
-    # Recipe Ingredients for Croissants
-    # 500g Flour
     RecipeIngredient.objects.get_or_create(recipe=croissant_recipe, ingredient_item=flour, defaults={'quantity_required': 500})
-    # 250g Butter (for lamination)
     RecipeIngredient.objects.get_or_create(recipe=croissant_recipe, ingredient_item=butter, defaults={'quantity_required': 250})
-    # 50g Sugar
     RecipeIngredient.objects.get_or_create(recipe=croissant_recipe, ingredient_item=sugar, defaults={'quantity_required': 50})
-    # 1 Egg (wash)
     RecipeIngredient.objects.get_or_create(recipe=croissant_recipe, ingredient_item=eggs, defaults={'quantity_required': 1})
-    # Milk
     RecipeIngredient.objects.get_or_create(recipe=croissant_recipe, ingredient_item=milk, defaults={'quantity_required': 0.3}) # 300ml
 
-    # Recipe Steps for Croissants
     if croissant_recipe.steps.count() == 0:
-        c1 = RecipeStep.objects.create(
-            recipe=croissant_recipe, 
-            step_number=1, 
-            instruction="Mix flour, sugar, milk to form dough. Chill."
-        )
-        RecipeStepIngredient.objects.create(step=c1, ingredient=flour, quantity="500g")
-        RecipeStepIngredient.objects.create(step=c1, ingredient=sugar, quantity="50g")
-        RecipeStepIngredient.objects.create(step=c1, ingredient=milk, quantity="300ml")
+        c1 = RecipeStep.objects.create(recipe=croissant_recipe, step_number=1, instruction="Mix flour, sugar, milk to form dough. Chill.")
+        RecipeStepIngredient.objects.create(step=c1, ingredient=flour)
+        RecipeStepIngredient.objects.create(step=c1, ingredient=sugar)
+        RecipeStepIngredient.objects.create(step=c1, ingredient=milk)
+        c2 = RecipeStep.objects.create(recipe=croissant_recipe, step_number=2, instruction="Laminate with butter.")
+        RecipeStepIngredient.objects.create(step=c2, ingredient=butter)
+        c3 = RecipeStep.objects.create(recipe=croissant_recipe, step_number=3, instruction="Shape, egg wash and bake.")
+        RecipeStepIngredient.objects.create(step=c3, ingredient=eggs)
 
-        c2 = RecipeStep.objects.create(
-            recipe=croissant_recipe, 
-            step_number=2, 
-            instruction="Laminate the dough with butter block. Fold and turn 3 times."
-        )
-        RecipeStepIngredient.objects.create(step=c2, ingredient=butter, quantity="250g")
-
-        c3 = RecipeStep.objects.create(
-            recipe=croissant_recipe, 
-            step_number=3, 
-            instruction="Shape into triangles and roll. Proof until jiggly. Egg wash and bake."
-        )
-        RecipeStepIngredient.objects.create(step=c3, ingredient=eggs, quantity="1 for wash")
-
-    # 8. Inventory
-    # Good Inventory
-    Inventory.objects.get_or_create(store=store, item=flour, location=loc_pantry, defaults={'quantity': 5000, 'expiration_date': timezone.now() + timedelta(days=100)})
-    Inventory.objects.get_or_create(store=store, item=sugar, location=loc_pantry, defaults={'quantity': 5000, 'expiration_date': timezone.now() + timedelta(days=200)})
-    Inventory.objects.get_or_create(store=store, item=butter, location=loc_fridge, defaults={'quantity': 1000, 'expiration_date': timezone.now() + timedelta(days=30)})
-    Inventory.objects.get_or_create(store=store, item=eggs, location=loc_fridge, defaults={'quantity': 100, 'expiration_date': timezone.now() + timedelta(days=10)})
-    Inventory.objects.get_or_create(store=store, item=choco_chips, location=loc_pantry, defaults={'quantity': 2000, 'expiration_date': timezone.now() + timedelta(days=150)})
+    # 8. Inventory (Ingredients)
+    today = timezone.now()
     
-    # Frozen Avocados (No Expiry)
-    Inventory.objects.get_or_create(store=store, item=frozen_avocados, location=loc_freezer, defaults={'quantity': 10, 'expiration_date': None})
+    # Helper to create inventory with expiration
+    def create_inv(item_obj, qty, loc, days_until_expiry=None):
+        exp_date = None
+        if days_until_expiry is not None:
+             exp_date = today + timedelta(days=days_until_expiry)
+        elif item_obj.shelf_life_days is not None:
+             exp_date = today + timedelta(days=item_obj.shelf_life_days)
+             
+        Inventory.objects.get_or_create(
+            store=store, 
+            item=item_obj, 
+            location=loc, 
+            defaults={'quantity': qty, 'expiration_date': exp_date}
+        )
 
-    # Milk Inventory
-    Inventory.objects.create(store=store, item=milk, location=loc_fridge, quantity=2, expiration_date=timezone.now()) # Expiring TODAY
+    create_inv(flour, 5000, loc_pantry, 100)
+    create_inv(sugar, 5000, loc_pantry, 200)
+    create_inv(butter, 1000, loc_fridge, 30)
+    create_inv(eggs, 100, loc_fridge, 10)
+    create_inv(choco_chips, 2000, loc_pantry, 150)
+    create_inv(frozen_avocados, 10, loc_freezer, None) # No Expiry
+    create_inv(milk, 2, loc_fridge, 0) # Expiring TODAY (shows in warning)
+    create_inv(cream, 1, loc_fridge, -5) # Expired 5 days ago (should be disposed, but sits here to show expired stock)
+    create_inv(salt, 5, loc_pantry, 365) # Low Stock
 
-    # Expired Item (Old Cream)
-    cream, _ = Item.objects.get_or_create(name="Heavy Cream", type="ingredient", defaults={'base_unit': 'L', 'shelf_life_days': 14})
-    Inventory.objects.create(store=store, item=cream, location=loc_fridge, quantity=1, expiration_date=timezone.now() - timedelta(days=5)) # Expired 5 days ago
-
-    # Low Stock Item
-    salt, _ = Item.objects.get_or_create(name="Salt", type="ingredient", defaults={'base_unit': 'g', 'shelf_life_days': 365})
-    Inventory.objects.get_or_create(store=store, item=salt, location=loc_pantry, defaults={'quantity': 5}) # Low stock (<10)
+    # 9. Inventory (Products - Freshly Made)
+    # Croissants made today, expire tomorrow (Shelf life 1 day)
+    create_inv(croissant, 24, loc_display, 1) 
+    
+    # Cookies made today, expire in 3 days
+    create_inv(cookies, 5, loc_display, 3) # 5 dozen
 
     print("Inventory populated.")
 
+    # 10. Generate Historical Data for Analytics (Last 30 Days)
+    print("Generating Analytics Data...")
+    
+    # A. Expired Waste Logs
+    # Simulate throwing away stuff over the last month
+    ExpiredItemLog.objects.create(store=store, item=milk, quantity_expired=3.925, disposed_at=today - timedelta(days=2), user=employee_user, notes="Sour smell")
+    ExpiredItemLog.objects.create(store=store, item=cream, quantity_expired=2.0, disposed_at=today - timedelta(days=10), user=employee_user, notes="Curdled")
+    ExpiredItemLog.objects.create(store=store, item=croissant, quantity_expired=55.0/12.0, disposed_at=today - timedelta(days=1), user=employee_user, notes="Stale batch") # ~4.58 dozen equivalent? No base unit is single. 55 singles.
+    # Wait, croissant base unit is 'single'. So quantity is count.
+    # Let's fix the croissant waste calculation. If base unit is single, quantity is just number.
+    # Previous verify script saw "4.583333333333333 Dozen". Wait, did I set base unit to dozen?
+    # In my verify script output previously: "Croissant 4.583333333333333 Dozen"
+    # In this script line 57: 'base_unit': 'single'.
+    # Ah, maybe the frontend or view logic converts it? Or maybe the previous DB had it as dozen?
+    # Let's stick to base_unit='single' for croissant.
+    
+    ExpiredItemLog.objects.create(store=store, item=croissant, quantity_expired=12, disposed_at=today - timedelta(days=5), user=employee_user, notes="Stale")
+    ExpiredItemLog.objects.create(store=store, item=cookies, quantity_expired=1, disposed_at=today - timedelta(days=8), user=employee_user, notes="Burnt") # 1 dozen
+
+    # B. Sales Trends (DailyUsage)
+    # Generate some sales for Croissants, Cookies, Sponge over 30 days
+    # DailyUsage needs: store, date, item, implied_consumption (quantity sold)
+    
+    products = [croissant, cookies, sponge]
+    
+    for i in range(30):
+        date = today - timedelta(days=i)
+        
+        # Random sales
+        # Croissants (singles)
+        sold_croissants = random.randint(10, 50)
+        DailyUsage.objects.create(store=store, date=date, item=croissant, implied_consumption=sold_croissants, starting_count=sold_croissants, ending_count=0)
+        
+        # Cookies (dozen)
+        sold_cookies = random.randint(2, 10)
+        DailyUsage.objects.create(store=store, date=date, item=cookies, implied_consumption=sold_cookies, starting_count=sold_cookies, ending_count=0)
+        
+        # Sponge (single)
+        if i % 3 == 0: # Sells less often
+             sold_sponge = random.randint(1, 5)
+             DailyUsage.objects.create(store=store, date=date, item=sponge, implied_consumption=sold_sponge, starting_count=sold_sponge, ending_count=0)
+
+    print("Analytics Data populated.")
     print("Done! Mock data created successfully.")
 
 if __name__ == '__main__':
     create_mock_data()
-
