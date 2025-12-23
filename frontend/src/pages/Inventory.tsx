@@ -34,7 +34,8 @@ const InventoryPage: React.FC = () => {
       try {
         const data = await getFullInventory(filterType);
         // Ensure data is array
-        const results = Array.isArray(data) ? data : data.results || [];
+        // Type assertion to handle potential pagination structure
+        const results = Array.isArray(data) ? data : (data as any).results || [];
         
         // Sort results
         if (sortOrder === 'alphabetical') {
