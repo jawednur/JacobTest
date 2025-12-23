@@ -9,6 +9,7 @@ import InventoryPage from './pages/Inventory';
 import ItemsPage from './pages/Items';
 import RecipesPage from './pages/Recipes';
 import UnitConversionsPage from './pages/UnitConversions';
+import AnalyticsPage from './pages/Analytics';
 import Login from './pages/Login';
 import Layout from './components/Layout';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -71,6 +72,14 @@ function App() {
                         <ProtectedRoute allowedRoles={['admin', 'it']}>
                             <Layout>
                                 <InventoryPage />
+                            </Layout>
+                        </ProtectedRoute>
+                    } />
+
+                    <Route path="/analytics" element={
+                        <ProtectedRoute allowedRoles={['admin', 'it']}>
+                            <Layout>
+                                <AnalyticsPage />
                             </Layout>
                         </ProtectedRoute>
                     } />

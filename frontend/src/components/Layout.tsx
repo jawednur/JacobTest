@@ -11,7 +11,8 @@ import {
     Utensils,
     History,
     Menu,
-    X
+    X,
+    BarChart2
 } from 'lucide-react';
 import logo from '../assets/toastique-icon.svg';
 
@@ -37,6 +38,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             label: 'Dashboard', 
             icon: LayoutDashboard,
             allowed: true 
+        },
+        { 
+            path: '/analytics', 
+            label: 'Analytics', 
+            icon: BarChart2,
+            allowed: isAdmin 
         },
         { 
             path: '/inventory', 

@@ -3,7 +3,8 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     ItemViewSet, DashboardStatsView, ProductionLogViewSet, StocktakeView, 
     InventoryViewSet, LocationViewSet, UnitConversionViewSet, RecipeViewSet,
-    ReceivingLogViewSet, StocktakeSessionViewSet, ExpiredItemLogViewSet
+    ReceivingLogViewSet, StocktakeSessionViewSet, ExpiredItemLogViewSet,
+    AnalyticsView
 )
 
 router = DefaultRouter()
@@ -20,5 +21,6 @@ router.register(r'expired-logs', ExpiredItemLogViewSet)
 urlpatterns = [
     path('inventory/dashboard/stats/', DashboardStatsView.as_view(), name='dashboard-stats'),
     path('inventory/stocktake/', StocktakeView.as_view(), name='stocktake'),
+    path('inventory/analytics/', AnalyticsView.as_view(), name='analytics'),
     path('inventory/', include(router.urls)),
 ]

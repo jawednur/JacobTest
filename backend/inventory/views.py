@@ -4,8 +4,8 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
-from django.db.models import Q
-from .models import Item, Inventory, ProductionLog, VarianceLog, Location, UnitConversion, Recipe, ReceivingLog, StocktakeSession, StocktakeRecord, ExpiredItemLog
+from django.db.models import Q, Sum
+from .models import Item, Inventory, ProductionLog, VarianceLog, Location, UnitConversion, Recipe, ReceivingLog, StocktakeSession, StocktakeRecord, ExpiredItemLog, RecipeIngredient, DailyUsage
 from .serializers import ItemSerializer, InventorySerializer, ProductionLogSerializer, VarianceLogSerializer, LocationSerializer, UnitConversionSerializer, RecipeSerializer, ReceivingLogSerializer, StocktakeSessionSerializer, StocktakeRecordSerializer, ExpiredItemLogSerializer
 from .services.inventory_service import InventoryService
 from datetime import timedelta
@@ -554,3 +554,169 @@ class ExpiredItemLogViewSet(viewsets.ReadOnlyModelViewSet):
         if store:
             return ExpiredItemLog.objects.filter(store=store).order_by('-disposed_at')
         return ExpiredItemLog.objects.none()
+
+class AnalyticsView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        store = getattr(user, 'store', None)
+        
+        # IT/Admin check
+        if not store and (getattr(user, 'role', '') == 'it' or user.is_superuser):
+            store_id = request.query_params.get('store_id')
+            if store_id:
+                from .models import Store
+                try:
+                    store = Store.objects.get(id=store_id)
+                except Store.DoesNotExist:
+                    pass
+
+        if not store:
+             return Response({"error": "No store context"}, status=400)
+
+        # Time range: Last 30 days
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=30)
+
+        # 0. Identify Top 3 Products
+        top_products_qs = DailyUsage.objects.filter(
+            store=store,
+            date__gte=start_date,
+            item__type='product',
+            implied_consumption__gt=0
+        ).values('item__name').annotate(
+            total_sold=Sum('implied_consumption')
+        ).order_by('-total_sold')[:3]
+        
+        top_3_names = [p['item__name'] for p in top_products_qs]
+
+        # 1. Sales/Consumption Trends (DailyUsage.implied_consumption)
+        # Initialize sales_trends map with dates and zero values for top items
+        sales_trends = {}
+        for i in range(31):
+            d = start_date + timedelta(days=i)
+            if d > end_date: break
+            date_str = d.strftime('%Y-%m-%d')
+            sales_trends[date_str] = {name: 0 for name in top_3_names}
+
+        # Use DailyUsage table which is populated by stocktake sessions
+        # Filter for product type items
+        daily_usage_qs = DailyUsage.objects.filter(
+            store=store, 
+            date__gte=start_date,
+            item__type='product',
+            item__name__in=top_3_names, # Limit to top 3
+            implied_consumption__gt=0
+        ).values('date', 'item__name').annotate(
+            total_sold=Sum('implied_consumption')
+        ).order_by('date')
+
+        # Populate with actual data
+        for usage in daily_usage_qs:
+            date_str = usage['date'].strftime('%Y-%m-%d')
+            item_name = usage['item__name'] or 'Unknown'
+            if date_str in sales_trends and item_name in sales_trends[date_str]:
+                sales_trends[date_str][item_name] = usage['total_sold']
+
+        formatted_trends = []
+        for date_str in sorted(sales_trends.keys()):
+            entry = {'date': date_str}
+            entry.update(sales_trends[date_str])
+            formatted_trends.append(entry)
+
+        # 2. Popular Products (by Sales/Consumption)
+        popular_products = DailyUsage.objects.filter(
+            store=store,
+            date__gte=start_date,
+            item__type='product',
+            implied_consumption__gt=0
+        ).values('item__name').annotate(
+            total_sold=Sum('implied_consumption')
+        ).order_by('-total_sold')[:10]
+        
+        # Rename key to match frontend expectation (was recipe__item__name -> item__name)
+        popular_products_formatted = []
+        for p in popular_products:
+            popular_products_formatted.append({
+                'recipe__item__name': p['item__name'], # Keep key for frontend compatibility
+                'total_made': p['total_sold'] # Keep key for frontend compatibility
+            })
+
+
+        # 3. Ingredient Usage (Based on Sales/Consumption of Products)
+        # We need to map Sold Products -> Recipes -> Ingredients
+        
+        # Get total sold quantity per item in the period
+        product_sales = DailyUsage.objects.filter(
+            store=store,
+            date__gte=start_date,
+            item__type='product',
+            implied_consumption__gt=0
+        ).values('item').annotate(total_sold=Sum('implied_consumption'))
+
+        ingredient_usage = {} # item_name -> {quantity: float, item: ItemObject}
+
+        for entry in product_sales:
+            item_id = entry['item']
+            total_sold = entry['total_sold']
+            
+            # Find recipe for this product
+            # Assuming 1-to-1 mapping for simplicity (first recipe found)
+            recipe = Recipe.objects.filter(item_id=item_id).first()
+            if not recipe or recipe.yield_quantity <= 0:
+                continue
+
+            scale = total_sold / recipe.yield_quantity
+            ingredients = RecipeIngredient.objects.filter(recipe=recipe).select_related('ingredient_item')
+            
+            for ing in ingredients:
+                qty = ing.quantity_required * scale
+                name = ing.ingredient_item.name
+                item_obj = ing.ingredient_item
+                
+                if name not in ingredient_usage:
+                    ingredient_usage[name] = {'quantity': 0, 'item': item_obj}
+                ingredient_usage[name]['quantity'] += qty
+
+        formatted_usage = []
+        for name, data in ingredient_usage.items():
+            qty, unit = data['item'].get_display_quantity_and_unit(data['quantity'])
+            formatted_usage.append({
+                'name': name,
+                'quantity': qty,
+                'unit': unit
+            })
+        formatted_usage.sort(key=lambda x: x['quantity'], reverse=True)
+
+        # 4. Current Stock (Products Only)
+        current_stock_qs = Inventory.objects.filter(
+            store=store, 
+            item__type='product'
+        ).select_related('item')
+        
+        stock_map = {}
+        for inv in current_stock_qs:
+            if inv.item.name not in stock_map:
+                stock_map[inv.item.name] = {'quantity': 0.0, 'item': inv.item}
+            stock_map[inv.item.name]['quantity'] += inv.quantity
+            
+        current_stock = []
+        for name, data in stock_map.items():
+            qty, unit = data['item'].get_display_quantity_and_unit(data['quantity'])
+            current_stock.append({
+                'item__name': name,
+                'total_quantity': qty,
+                'item__base_unit': unit
+            })
+        
+        current_stock.sort(key=lambda x: x['total_quantity'], reverse=True)
+
+        data = {
+            "production_trends": formatted_trends, # Now Sales Trends
+            "popular_products": popular_products_formatted, # Now Popular Sales
+            "ingredient_usage": formatted_usage, # Now usage based on Sales
+            "current_stock": current_stock
+        }
+        
+        return Response(data)

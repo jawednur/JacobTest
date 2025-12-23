@@ -19,6 +19,11 @@ export const getDashboardStats = async () => {
   return response.data;
 };
 
+export const getAnalytics = async () => {
+  const response = await api.get('/inventory/analytics/');
+  return response.data;
+};
+
 export const getItems = async () => {
   let results: any[] = [];
   let url: string | null = '/inventory/items/';
