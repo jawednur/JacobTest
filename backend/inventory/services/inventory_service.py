@@ -9,7 +9,7 @@ class InventoryService:
     def process_receiving_log(receiving_log: ReceivingLog):
         """
         Updates inventory when items are received.
-        Uses the item's default location for the store.
+        Creates a NEW batch (Inventory record) to preserve expiration dates.
         """
         store = receiving_log.store
         item = receiving_log.item
@@ -18,37 +18,52 @@ class InventoryService:
         # Find default location
         location = None
         if hasattr(item, 'store_settings'):
-            # This might return multiple if not filtered by store, but store_settings is a related manager.
-            # We need to filter by store.
             settings = item.store_settings.filter(store=store).first()
             if settings:
                 location = settings.default_location
         
         if not location:
-            # Fallback: Find first non-sales floor location
             location = Location.objects.filter(store=store, is_sales_floor=False).first()
         
         if not location:
-            # Fallback: Find any location
             location = Location.objects.filter(store=store).first()
             
         if not location:
-            # Create a default location if none exists
             location = Location.objects.create(store=store, name="Back of House")
 
-        # Update Inventory
-        inventory, created = Inventory.objects.get_or_create(
+        # Create NEW Inventory Batch
+        # We try to match an existing batch with the SAME expiration date (to avoid fragmentation)
+        # OR create new if none exists.
+        
+        expiration_date = None
+        if item.shelf_life_days is not None:
+             expiration_date = timezone.now() + timedelta(days=item.shelf_life_days)
+
+        # Look for existing batch with approximate expiration (same day)
+        # Since expiration_date is DateTime, we need to be careful.
+        # Ideally we'd strip time or use a small window, but for now exact match or new is safer for FIFO.
+        # To avoid infinite rows, let's try to match strict date if possible or just create new.
+        # Given the requirements, creating new is safest to guarantee we don't mix old/new.
+        # However, to prevent database explosion, maybe we check if there is a batch created "today"?
+        # For now, let's just Create New or Update EXACT Match.
+        
+        inventory = None
+        if expiration_date:
+            # Try to find one with very close expiration (e.g. created today/same expiry)
+            # This is tricky with exact timestamps.
+            # Simplified approach: Create new record.
+            pass
+        
+        # Actually, let's try to reuse if it has NO expiration date and we are adding one?
+        # No, "Receiving" implies new stock. New stock = New Expiration.
+        
+        inventory = Inventory.objects.create(
             store=store,
             item=item,
             location=location,
-            defaults={'quantity': 0}
+            quantity=quantity,
+            expiration_date=expiration_date
         )
-        
-        if item.shelf_life_days is not None and (created or inventory.quantity == 0 or inventory.expiration_date is None):
-             inventory.expiration_date = timezone.now() + timedelta(days=item.shelf_life_days)
-
-        inventory.quantity = F('quantity') + quantity
-        inventory.save()
 
     @staticmethod
     def finalize_stocktake_session(session: StocktakeSession):
@@ -137,38 +152,116 @@ class InventoryService:
                              batches = log.quantity_made / recipe.yield_quantity 
                          
                          theoretical_usage += batches * ri.quantity_required
+                
+                # Report Data Construction
+                if session.type == 'ADDITION':
+                     # For addition, we just show what was added
+                     report_data.append({
+                        'item_id': item_id,
+                        'item_name': item.name,
+                        'start_quantity': current_inventory,
+                        'received_quantity': total_counted, # effectively "received" in this session
+                        'end_quantity': current_inventory + total_counted,
+                        'actual_usage': 0, # Not calculating usage for addition session
+                        'theoretical_usage': 0,
+                        'variance': 0,
+                        'unit': item.base_unit
+                    })
+                else:
+                    report_data.append({
+                        'item_id': item_id,
+                        'item_name': item.name,
+                        'start_quantity': start_qty,
+                        'received_quantity': received_qty,
+                        'end_quantity': total_counted,
+                        'actual_usage': actual_usage,
+                        'theoretical_usage': theoretical_usage,
+                        'variance': variance,
+                        'unit': item.base_unit
+                    })
 
-                report_data.append({
-                    'item_id': item_id,
-                    'item_name': item.name,
-                    'start_quantity': start_qty,
-                    'received_quantity': received_qty,
-                    'end_quantity': total_counted,
-                    'actual_usage': actual_usage,
-                    'theoretical_usage': theoretical_usage,
-                    'variance': variance,
-                    'unit': item.base_unit
-                })
-
-                # Update Inventory to match Count
+                # Update Inventory to match Count (or Add)
+                
+                # Update Inventory to match Count (or Add)
                 
                 for record in item_records:
-                    # Find existing inventory for this item/location
-                    existing_invs = Inventory.objects.filter(store=store, item_id=item_id, location=record.location)
-                    
-                    if existing_invs.exists():
-                        # Update first, delete rest
-                        first_inv = existing_invs.first()
-                        first_inv.quantity = record.quantity_counted
-                        first_inv.save()
-                        existing_invs.exclude(id=first_inv.id).delete()
-                    else:
+                    if session.type == 'ADDITION':
+                        # For Addition, we just add a NEW batch with "fresh" expiration (or none)
+                        # We don't mess with existing batches
+                        expiration_date = None
+                        if item.shelf_life_days is not None:
+                             expiration_date = timezone.now() + timedelta(days=item.shelf_life_days)
+                        
                         Inventory.objects.create(
                             store=store,
                             item_id=item_id,
                             location=record.location,
-                            quantity=record.quantity_counted
+                            quantity=record.quantity_counted,
+                            expiration_date=expiration_date
                         )
+                    else:
+                        # FULL Stocktake: FIFO Reconciliation
+                        # We have total_counted. We want to keep batches that sum up to this, newest first.
+                        
+                        target_quantity = record.quantity_counted
+                        
+                        # Fetch existing batches sorted NEWEST to OLDEST (descending expiration)
+                        # Null expiration dates: Assume they are oldest? Or newest?
+                        # Usually non-perishables (null exp) don't matter, but if mixed:
+                        # Let's assume Null expiration is "Infinite Shelf Life" -> Keep them?
+                        # Or assume user wants to keep the valid dated ones?
+                        # Let's sort by expiration_date DESC (Newest first). Nulls last?
+                        # F(expiration_date).desc(nulls_last=True)
+                        
+                        # Fetch existing batches sorted NEWEST to OLDEST (descending expiration)
+                        # We want to keep:
+                        # 1. Items with NO expiration (Infinite shelf life) -> nulls_first=True
+                        # 2. Items with Future expiration (Newest)
+                        # 3. Items with Past expiration (Oldest)
+                        
+                        batches = Inventory.objects.filter(
+                            store=store, 
+                            item_id=item_id, 
+                            location=record.location
+                        ).order_by(F('expiration_date').desc(nulls_first=True))
+
+                        batches = list(batches)
+                        # Wait, standard SQL: NULL < Values.
+                        # DESC: Values (Future) -> Values (Past) -> NULL.
+                        # Actually we want to keep FUTURE expiration dates.
+                        
+                        remaining_needed = target_quantity
+                        
+                        for batch in batches:
+                            if remaining_needed <= 0:
+                                # We have filled our count, this batch is extra (old/phantom), delete it
+                                batch.delete()
+                            else:
+                                if batch.quantity <= remaining_needed:
+                                    # Keep this whole batch
+                                    remaining_needed -= batch.quantity
+                                    # Batch stays as is (quantity matches)
+                                else:
+                                    # This batch is partially needed
+                                    batch.quantity = remaining_needed
+                                    batch.save()
+                                    remaining_needed = 0
+                        
+                        if remaining_needed > 0:
+                            # We still need more items than we had on shelf.
+                            # Create a NEW batch for the surplus.
+                            # Expiration? New/Fresh.
+                            expiration_date = None
+                            if item.shelf_life_days is not None:
+                                 expiration_date = timezone.now() + timedelta(days=item.shelf_life_days)
+                            
+                            Inventory.objects.create(
+                                store=store,
+                                item_id=item_id,
+                                location=record.location,
+                                quantity=remaining_needed,
+                                expiration_date=expiration_date
+                            )
 
             session.status = 'COMPLETED'
             session.completed_at = timezone.now()
@@ -366,17 +459,17 @@ class InventoryService:
                  
                  quantity_to_add_base = batches * recipe_yield_base
 
-                 prod_inv, created = Inventory.objects.get_or_create(
+                 # Create NEW Inventory Batch for Production Output
+                 expiration_date = None
+                 if produced_item.shelf_life_days is not None:
+                      expiration_date = timezone.now() + timedelta(days=produced_item.shelf_life_days)
+
+                 Inventory.objects.create(
                      store=store,
                      item=produced_item,
                      location=production_log.target_location,
-                     defaults={'quantity': 0}
+                     quantity=quantity_to_add_base,
+                     expiration_date=expiration_date
                  )
-                 
-                 if produced_item.shelf_life_days is not None:
-                      prod_inv.expiration_date = timezone.now() + timedelta(days=produced_item.shelf_life_days)
-                 
-                 prod_inv.quantity = F('quantity') + quantity_to_add_base
-                 prod_inv.save()
         
         return None

@@ -29,17 +29,33 @@ export const getItems = async () => {
   let url: string | null = '/inventory/items/';
 
   while (url) {
-    const response: any = await api.get(url);
-    const data: any = response.data;
+    try {
+      const response: any = await api.get(url);
+      const data: any = response.data;
 
-    if (Array.isArray(data)) {
-      return data;
-    }
+      if (Array.isArray(data)) {
+        return data;
+      }
 
-    if (data.results) {
-      results = [...results, ...data.results];
-      url = data.next;
-    } else {
+      if (data.results) {
+        results = [...results, ...data.results];
+        // Handle absolute URLs in pagination by stripping the origin and /api prefix
+        if (data.next && data.next.startsWith('http')) {
+          try {
+            const nextUrl = new URL(data.next);
+            const path = nextUrl.pathname.replace(/^\/api/, '');
+            url = path + nextUrl.search;
+          } catch (e) {
+            url = data.next;
+          }
+        } else {
+          url = data.next;
+        }
+      } else {
+        break;
+      }
+    } catch (err) {
+      console.error("Error fetching items page", err);
       break;
     }
   }
@@ -61,17 +77,33 @@ export const getRecipesList = async () => {
   let url: string | null = '/inventory/recipes/';
 
   while (url) {
-    const response: any = await api.get(url);
-    const data: any = response.data;
+    try {
+      const response: any = await api.get(url);
+      const data: any = response.data;
 
-    if (Array.isArray(data)) {
-      return data;
-    }
+      if (Array.isArray(data)) {
+        return data;
+      }
 
-    if (data.results) {
-      results = [...results, ...data.results];
-      url = data.next;
-    } else {
+      if (data.results) {
+        results = [...results, ...data.results];
+        // Handle absolute URLs in pagination by stripping the origin and /api prefix
+        if (data.next && data.next.startsWith('http')) {
+          try {
+            const nextUrl = new URL(data.next);
+            const path = nextUrl.pathname.replace(/^\/api/, '');
+            url = path + nextUrl.search;
+          } catch (e) {
+            url = data.next;
+          }
+        } else {
+          url = data.next;
+        }
+      } else {
+        break;
+      }
+    } catch (err) {
+      console.error("Error fetching recipes page", err);
       break;
     }
   }
@@ -88,17 +120,33 @@ export const getFullInventory = async (typeFilter?: string) => {
   }
 
   while (url) {
-    const response: any = await api.get(url);
-    const data = response.data;
+    try {
+      const response: any = await api.get(url);
+      const data = response.data;
 
-    if (Array.isArray(data)) {
-      return data; // Not paginated
-    }
+      if (Array.isArray(data)) {
+        return data; // Not paginated
+      }
 
-    if (data.results) {
-      results = [...results, ...data.results];
-      url = data.next; // Follow pagination
-    } else {
+      if (data.results) {
+        results = [...results, ...data.results];
+        // Handle absolute URLs in pagination by stripping the origin and /api prefix
+        if (data.next && data.next.startsWith('http')) {
+          try {
+            const nextUrl = new URL(data.next);
+            const path = nextUrl.pathname.replace(/^\/api/, '');
+            url = path + nextUrl.search;
+          } catch (e) {
+            url = data.next;
+          }
+        } else {
+          url = data.next;
+        }
+      } else {
+        break;
+      }
+    } catch (err) {
+      console.error("Error fetching inventory page", err);
       break;
     }
   }
@@ -164,8 +212,13 @@ export const createReceivingLog = async (data: any) => {
 };
 
 // Stocktake Session
-export const startStocktakeSession = async () => {
-  const response = await api.post('/inventory/stocktake-sessions/start/');
+export const getActiveStocktakeSession = async () => {
+  const response = await api.get('/inventory/stocktake-sessions/current/');
+  return response.data;
+};
+
+export const startStocktakeSession = async (type: 'FULL' | 'ADDITION' = 'FULL') => {
+  const response = await api.post('/inventory/stocktake-sessions/start/', { type });
   return response.data;
 };
 

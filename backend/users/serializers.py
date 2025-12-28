@@ -11,8 +11,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'store', 'store_name']
-        read_only_fields = ['role', 'store'] # Assuming users can't change their role/store via profile update for security
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'store', 'store_name', 'is_superuser']
+        read_only_fields = ['role', 'store', 'is_superuser'] # Assuming users can't change their role/store via profile update for security
 
 class UserAdminSerializer(serializers.ModelSerializer):
     store_name = serializers.CharField(source='store.name', read_only=True)

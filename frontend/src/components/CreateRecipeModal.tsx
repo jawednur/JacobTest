@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Save } from 'lucide-react';
-import { getItems, createRecipe, createItem } from '../services/api';
+import { X, Plus, Trash2, Save, Image as ImageIcon } from 'lucide-react';
+import { getItems, createRecipe, updateRecipe, createItem } from '../services/api';
 
 interface UnitConversion {
     id: number;
@@ -66,17 +66,32 @@ const parseQuantity = (value: string): number => {
 };
 
 interface StepInput {
+    id?: number;
     step_number: number;
     instruction: string;
+    image_url?: string; // Existing or preview
+    new_image?: string; // Base64 for upload
+    image_deleted?: boolean;
 }
+
+// Helper to read file as Base64
+const readFileAsDataURL = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+};
 
 interface CreateRecipeModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSuccess: () => void;
+    initialRecipe?: any; // Recipe to edit
 }
 
-const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, onSuccess }) => {
+const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, onSuccess, initialRecipe }) => {
     const [products, setProducts] = useState<Item[]>([]);
     const [ingredientsList, setIngredientsList] = useState<Item[]>([]);
     const [loading, setLoading] = useState(false);
@@ -99,6 +114,49 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
             fetchItems();
         }
     }, [isOpen]);
+
+    // Populate form if editing
+    useEffect(() => {
+        if (isOpen && initialRecipe && products.length > 0 && ingredientsList.length > 0) {
+            setSelectedProductId(initialRecipe.item);
+            setYieldQuantity(initialRecipe.yield_quantity);
+
+            // Map ingredients
+            // Using base units for simplicity and accuracy
+            const mappedIngredients = (initialRecipe.ingredients || []).map((ing: any) => ({
+                ingredient_item: ing.ingredient_item,
+                quantity_required: ing.quantity_required, // Base unit quantity
+                quantity_input: ing.quantity_required.toString(),
+                selected_unit_factor: 1,
+                selected_unit_name: ing.base_unit
+            }));
+            setRecipeIngredients(mappedIngredients);
+
+            // Map steps
+            if (initialRecipe.steps && initialRecipe.steps.length > 0) {
+                setSteps(initialRecipe.steps.map((s: any) => ({
+                    id: s.id,
+                    step_number: s.step_number,
+                    instruction: s.instruction,
+                    image_url: s.image // Assuming backend returns full URL or path
+                })));
+            } else {
+                setSteps([{ step_number: 1, instruction: '' }]);
+            }
+
+            setIsNewProduct(false);
+        } else if (isOpen && !initialRecipe) {
+            // Reset for create mode
+            setSelectedProductId(null);
+            setIsNewProduct(false);
+            setNewProductName('');
+            setNewProductUnit('Each');
+            setShelfLife(1);
+            setYieldQuantity(1);
+            setRecipeIngredients([]);
+            setSteps([{ step_number: 1, instruction: '' }]);
+        }
+    }, [isOpen, initialRecipe, products, ingredientsList]);
 
     const fetchItems = async () => {
         setLoading(true);
@@ -195,6 +253,34 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
         setSteps(newSteps);
     };
 
+    const handleImageUpload = async (index: number, file: File) => {
+        try {
+            const base64 = await readFileAsDataURL(file);
+            const newSteps = [...steps];
+            newSteps[index] = {
+                ...newSteps[index],
+                new_image: base64,
+                image_url: base64, // Preview
+                image_deleted: false
+            };
+            setSteps(newSteps);
+        } catch (err) {
+            console.error("Failed to read image file", err);
+            alert("Failed to process image.");
+        }
+    };
+
+    const handleRemoveImage = (index: number) => {
+        const newSteps = [...steps];
+        newSteps[index] = {
+            ...newSteps[index],
+            image_url: undefined,
+            new_image: undefined,
+            image_deleted: true
+        };
+        setSteps(newSteps);
+    };
+
     const handleSubmit = async () => {
         try {
             setLoading(true);
@@ -237,22 +323,47 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
                 item: targetItemId,
                 yield_quantity: yieldQuantity,
                 ingredients: ingredientsPayload,
-                steps: steps.filter(s => s.instruction.trim() !== '')
+                steps: steps.filter(s => s.instruction.trim() !== '').map(s => {
+                    const stepPayload: any = {
+                        step_number: s.step_number,
+                        instruction: s.instruction,
+                        caption: ''
+                    };
+
+                    if (s.id) {
+                        stepPayload.id = s.id;
+                    }
+
+                    if (s.new_image) {
+                        stepPayload.image = s.new_image;
+                    } else if (s.image_deleted) {
+                        stepPayload.image = null;
+                    }
+                    // If neither, omit image field to keep existing
+
+                    return stepPayload;
+                })
             };
 
             console.log("Submitting recipe data:", JSON.stringify(recipeData, null, 2));
 
-            await createRecipe(recipeData);
-            console.log("Recipe created successfully");
+            if (initialRecipe) {
+                await updateRecipe(initialRecipe.id, recipeData);
+                console.log("Recipe updated successfully");
+            } else {
+                await createRecipe(recipeData);
+                console.log("Recipe created successfully");
+            }
+
             onSuccess();
             onClose();
         } catch (error: any) {
-            console.error("Error creating recipe", error);
+            console.error("Error creating/updating recipe", error);
             if (error.response) {
                 console.error("Server response:", error.response.data);
-                alert(`Failed to create recipe: ${JSON.stringify(error.response.data)}`);
+                alert(`Failed to save recipe: ${JSON.stringify(error.response.data)}`);
             } else {
-                alert("Failed to create recipe. It might already exist for this item.");
+                alert("Failed to save recipe. It might already exist for this item.");
             }
         } finally {
             setLoading(false);
@@ -265,36 +376,39 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 overflow-y-auto">
             <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl my-8 flex flex-col max-h-[90vh]">
                 <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-lg">
-                    <h2 className="text-2xl font-bold text-gray-800">Create New Recipe</h2>
+                    <h2 className="text-2xl font-bold text-gray-800">{initialRecipe ? 'Edit Recipe' : 'Create New Recipe'}</h2>
                     <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
                         <X className="w-6 h-6" />
                     </button>
                 </div>
 
                 <div className="p-6 overflow-y-auto flex-1">
-                    {/* Product Selection */}
+                    {/* Product Selection - Only allow changing if creating new recipe or if needed (usually tied to item so maybe readonly in edit?) */}
+                    {/* For now allowing edit but logic suggests recipe is unique to item. */}
                     <div className="mb-8">
                         <label className="block text-sm font-medium text-gray-700 mb-2">Recipe For</label>
-                        <div className="flex items-center mb-4">
-                            <label className="flex items-center mr-6 cursor-pointer">
-                                <input
-                                    type="radio"
-                                    checked={!isNewProduct}
-                                    onChange={() => setIsNewProduct(false)}
-                                    className="mr-2 h-4 w-4 text-blue-600"
-                                />
-                                Existing Product
-                            </label>
-                            <label className="flex items-center cursor-pointer">
-                                <input
-                                    type="radio"
-                                    checked={isNewProduct}
-                                    onChange={() => setIsNewProduct(true)}
-                                    className="mr-2 h-4 w-4 text-blue-600"
-                                />
-                                New Product
-                            </label>
-                        </div>
+                        {!initialRecipe && (
+                            <div className="flex items-center mb-4">
+                                <label className="flex items-center mr-6 cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        checked={!isNewProduct}
+                                        onChange={() => setIsNewProduct(false)}
+                                        className="mr-2 h-4 w-4 text-blue-600"
+                                    />
+                                    Existing Product
+                                </label>
+                                <label className="flex items-center cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        checked={isNewProduct}
+                                        onChange={() => setIsNewProduct(true)}
+                                        className="mr-2 h-4 w-4 text-blue-600"
+                                    />
+                                    New Product
+                                </label>
+                            </div>
+                        )}
 
                         {isNewProduct ? (
                             <div className="grid grid-cols-2 gap-4">
@@ -334,6 +448,7 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
                                 className="w-full border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 outline-none"
                                 value={selectedProductId || ''}
                                 onChange={(e) => setSelectedProductId(Number(e.target.value))}
+                                disabled={!!initialRecipe} // Disable changing item when editing
                             >
                                 <option value="">Select a product...</option>
                                 {products.map(p => (
@@ -342,6 +457,7 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
                             </select>
                         )}
                     </div>
+
 
                     {/* Yield */}
                     <div className="mb-8">
@@ -455,7 +571,7 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
                                             {step.step_number}
                                         </div>
                                     </div>
-                                    <div className="flex-1">
+                                    <div className="flex-1 flex flex-col gap-2">
                                         <textarea
                                             className="w-full border border-gray-300 rounded-md p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
                                             rows={2}
@@ -463,6 +579,37 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
                                             value={step.instruction}
                                             onChange={(e) => handleStepChange(idx, e.target.value)}
                                         />
+
+                                        {/* Image Upload for Step */}
+                                        <div className="flex items-center gap-2">
+                                            {step.image_url ? (
+                                                <div className="relative group w-20 h-20 bg-gray-100 rounded-md border overflow-hidden">
+                                                    <img src={step.image_url} alt="Step" className="w-full h-full object-cover" />
+                                                    <button
+                                                        onClick={() => handleRemoveImage(idx)}
+                                                        className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                                        title="Remove Image"
+                                                    >
+                                                        <Trash2 className="w-5 h-5" />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <label className="cursor-pointer flex items-center text-xs text-gray-500 hover:text-blue-600 bg-gray-50 px-3 py-2 rounded border border-dashed border-gray-300 hover:border-blue-400 transition-colors">
+                                                    <ImageIcon className="w-4 h-4 mr-1.5" />
+                                                    Add Image
+                                                    <input
+                                                        type="file"
+                                                        className="hidden"
+                                                        accept="image/*"
+                                                        onChange={(e) => {
+                                                            if (e.target.files && e.target.files[0]) {
+                                                                handleImageUpload(idx, e.target.files[0]);
+                                                            }
+                                                        }}
+                                                    />
+                                                </label>
+                                            )}
+                                        </div>
                                     </div>
                                     <button
                                         onClick={() => handleRemoveStep(idx)}

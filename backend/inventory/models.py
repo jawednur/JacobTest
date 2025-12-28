@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 # --- Organizational & Item Logic ---
 
@@ -149,6 +150,7 @@ class Inventory(models.Model):
     item = models.ForeignKey(Item, on_delete=models.CASCADE)
     quantity = models.FloatField() # Always in Base Units
     expiration_date = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
         return f"{self.item.name} at {self.location.name}: {self.quantity}"
@@ -216,10 +218,15 @@ class StocktakeSession(models.Model):
         ('COMPLETED', 'Completed'),
         ('CANCELLED', 'Cancelled'),
     )
+    TYPE_CHOICES = (
+        ('FULL', 'Full Stocktake'),
+        ('ADDITION', 'Addition / Delivery'),
+    )
     store = models.ForeignKey('users.Store', on_delete=models.CASCADE)
     started_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='FULL')
     user = models.ForeignKey('users.CustomUser', on_delete=models.SET_NULL, null=True)
 
     def __str__(self):

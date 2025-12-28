@@ -63,7 +63,7 @@ const ITDashboard: React.FC = () => {
                 role: formData.role,
                 store: formData.store ? parseInt(formData.store) : null
             };
-            
+
             if (formData.password) {
                 payload.password = formData.password;
             }
@@ -73,7 +73,7 @@ const ITDashboard: React.FC = () => {
             } else {
                 await createUser(payload);
             }
-            
+
             setShowUserModal(false);
             setEditingUser(null);
             resetForm();
@@ -113,13 +113,13 @@ const ITDashboard: React.FC = () => {
     return (
         <div className="p-6 max-w-7xl mx-auto">
             <h1 className="text-3xl font-bold mb-6 text-charcoal">IT Dashboard</h1>
-            
+
             {/* Status Section */}
             <div className="mb-8">
-                 <h2 className="text-xl font-semibold mb-4 flex items-center text-charcoal"><Server className="mr-2 w-5 h-5"/> System Status</h2>
-                 <div className="border border-neutral-light rounded-lg overflow-hidden h-64 bg-white shadow-sm">
-                     <iframe src="https://status.railway.app/" className="w-full h-full border-0" title="Railway Status" />
-                 </div>
+                <h2 className="text-xl font-semibold mb-4 flex items-center text-charcoal"><Server className="mr-2 w-5 h-5" /> System Status</h2>
+                <div className="border border-neutral-light rounded-lg overflow-hidden h-64 bg-white shadow-sm">
+                    <iframe src="https://status.railway.app/" className="w-full h-full border-0" title="Railway Status" />
+                </div>
             </div>
 
             {/* Quick Actions */}
@@ -145,14 +145,14 @@ const ITDashboard: React.FC = () => {
             <div className="bg-white rounded-xl shadow-sm border border-neutral-light p-6">
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-xl font-semibold text-charcoal">User Management</h2>
-                    <button 
-                        onClick={() => { setEditingUser(null); resetForm(); setShowUserModal(true); }} 
+                    <button
+                        onClick={() => { setEditingUser(null); resetForm(); setShowUserModal(true); }}
                         className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-dark transition-colors"
                     >
                         + Add User
                     </button>
                 </div>
-                
+
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
                         <thead className="bg-neutral-pale text-dark-grey uppercase text-xs">
@@ -171,8 +171,8 @@ const ITDashboard: React.FC = () => {
                                     <td className="px-4 py-3">{user.first_name} {user.last_name}</td>
                                     <td className="px-4 py-3 capitalize">
                                         <span className={`px-2 py-1 rounded-full text-xs font-semibold 
-                                            ${user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 
-                                              user.role === 'it' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
+                                            ${user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
+                                                user.role === 'it' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
                                             {user.role}
                                         </span>
                                     </td>
@@ -188,7 +188,7 @@ const ITDashboard: React.FC = () => {
                     </table>
                 </div>
             </div>
-            
+
             {/* User Modal */}
             {showUserModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -197,48 +197,48 @@ const ITDashboard: React.FC = () => {
                         <form onSubmit={handleCreateOrUpdateUser} className="space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Username</label>
-                                <input 
-                                    type="text" 
-                                    required 
+                                <input
+                                    type="text"
+                                    required
                                     className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                                     value={formData.username}
-                                    onChange={e => setFormData({...formData, username: e.target.value})}
+                                    onChange={e => setFormData({ ...formData, username: e.target.value })}
                                 />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Email</label>
-                                <input 
-                                    type="email" 
-                                    required 
+                                <input
+                                    type="email"
+                                    required
                                     className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                                     value={formData.email}
-                                    onChange={e => setFormData({...formData, email: e.target.value})}
+                                    onChange={e => setFormData({ ...formData, email: e.target.value })}
                                 />
                             </div>
-                             <div>
+                            <div>
                                 <label className="block text-sm font-medium text-gray-700">First Name</label>
-                                <input 
-                                    type="text" 
+                                <input
+                                    type="text"
                                     className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                                     value={formData.first_name}
-                                    onChange={e => setFormData({...formData, first_name: e.target.value})}
+                                    onChange={e => setFormData({ ...formData, first_name: e.target.value })}
                                 />
                             </div>
-                             <div>
+                            <div>
                                 <label className="block text-sm font-medium text-gray-700">Last Name</label>
-                                <input 
-                                    type="text" 
+                                <input
+                                    type="text"
                                     className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                                     value={formData.last_name}
-                                    onChange={e => setFormData({...formData, last_name: e.target.value})}
+                                    onChange={e => setFormData({ ...formData, last_name: e.target.value })}
                                 />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Role</label>
-                                <select 
+                                <select
                                     className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                                     value={formData.role}
-                                    onChange={e => setFormData({...formData, role: e.target.value})}
+                                    onChange={e => setFormData({ ...formData, role: e.target.value })}
                                 >
                                     <option value="employee">Employee</option>
                                     <option value="admin">Store Admin</option>
@@ -247,10 +247,10 @@ const ITDashboard: React.FC = () => {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Store</label>
-                                <select 
+                                <select
                                     className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                                     value={formData.store}
-                                    onChange={e => setFormData({...formData, store: e.target.value})}
+                                    onChange={e => setFormData({ ...formData, store: e.target.value })}
                                 >
                                     <option value="">No Store (Global/IT)</option>
                                     {stores.map(store => (
@@ -260,25 +260,25 @@ const ITDashboard: React.FC = () => {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Password {editingUser && '(Leave blank to keep current)'}</label>
-                                <input 
-                                    type="password" 
+                                <input
+                                    type="password"
                                     className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                                     value={formData.password}
-                                    onChange={e => setFormData({...formData, password: e.target.value})}
+                                    onChange={e => setFormData({ ...formData, password: e.target.value })}
                                     required={!editingUser}
                                 />
                             </div>
-                            
+
                             <div className="flex justify-end space-x-3 mt-6">
-                                <button 
-                                    type="button" 
+                                <button
+                                    type="button"
                                     onClick={() => setShowUserModal(false)}
                                     className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
                                 >
                                     Cancel
                                 </button>
-                                <button 
-                                    type="submit" 
+                                <button
+                                    type="submit"
                                     className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark"
                                 >
                                     Save

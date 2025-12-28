@@ -67,3 +67,35 @@ class ExpirationCalculationTestCase(TestCase):
         delta = abs(inv.expiration_date - expected)
         self.assertLess(delta.total_seconds(), 5)
 
+    def test_stocktake_session_finalization_sets_expiration(self):
+        from inventory.models import StocktakeSession, StocktakeRecord
+        
+        # Create session
+        session = StocktakeSession.objects.create(
+            store=self.store,
+            user=self.user,
+            status='PENDING',
+            type='FULL'
+        )
+        
+        # Create record for new location
+        new_location = Location.objects.create(store=self.store, name="New Shelf")
+        StocktakeRecord.objects.create(
+            session=session,
+            item=self.item,
+            location=new_location,
+            quantity_counted=5
+        )
+        
+        # Finalize
+        InventoryService.finalize_stocktake_session(session)
+        
+        # Check inventory
+        inv = Inventory.objects.get(store=self.store, item=self.item, location=new_location)
+        self.assertEqual(inv.quantity, 5)
+        self.assertIsNotNone(inv.expiration_date)
+        
+        expected = timezone.now() + timedelta(days=5)
+        delta = abs(inv.expiration_date - expected)
+        self.assertLess(delta.total_seconds(), 5)
+

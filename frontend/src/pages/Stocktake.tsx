@@ -3,6 +3,7 @@ import { useSwipeable } from 'react-swipeable';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     startStocktakeSession,
+    getActiveStocktakeSession,
     saveStocktakeRecords,
     finalizeStocktakeSession,
     getLocations,
@@ -53,34 +54,51 @@ const StocktakePage: React.FC = () => {
 
     // Initial Load
     useEffect(() => {
-        initializeStocktake();
+        checkActiveSession();
     }, []);
 
-    const initializeStocktake = async () => {
+    const loadMetadata = async () => {
+        // Load Metadata
+        const [locs, itemsData] = await Promise.all([
+            getLocations(),
+            getItems()
+        ]);
+        setLocations(locs);
+        setItems(itemsData);
+
+        // Load Units (can be optimized to load on demand, but preloading for smoother UI)
+        const unitsMap: { [key: number]: any[] } = {};
+        await Promise.all(itemsData.map(async (item: any) => {
+            try {
+                const convs = await getItemConversions(item.id);
+                unitsMap[item.id] = convs;
+            } catch (e) { /* ignore */ }
+        }));
+        setItemUnits(unitsMap);
+    };
+
+    const checkActiveSession = async () => {
+        setLoading(true);
+        try {
+            const activeSession = await getActiveStocktakeSession();
+            if (activeSession) {
+                setSession(activeSession);
+                await loadMetadata();
+            }
+        } catch (err) {
+            console.error("Failed to check active session", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const initializeStocktake = async (type: 'FULL' | 'ADDITION') => {
         setLoading(true);
         try {
             // Start or Get Session
-            const sessionData = await startStocktakeSession();
+            const sessionData = await startStocktakeSession(type);
             setSession(sessionData);
-
-            // Load Metadata
-            const [locs, itemsData] = await Promise.all([
-                getLocations(),
-                getItems()
-            ]);
-            setLocations(locs);
-            setItems(itemsData);
-
-            // Load Units (can be optimized to load on demand, but preloading for smoother UI)
-            const unitsMap: { [key: number]: any[] } = {};
-            await Promise.all(itemsData.map(async (item: any) => {
-                try {
-                    const convs = await getItemConversions(item.id);
-                    unitsMap[item.id] = convs;
-                } catch (e) { /* ignore */ }
-            }));
-            setItemUnits(unitsMap);
-
+            await loadMetadata();
         } catch (err) {
             console.error("Failed to init stocktake", err);
             alert("Could not start stocktake session.");
@@ -227,6 +245,39 @@ const StocktakePage: React.FC = () => {
 
     // --- Render ---
 
+    if (!session && !loading && !report) {
+        return (
+            <div className="p-6 bg-gray-50 min-h-screen flex items-center justify-center">
+                <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full text-center">
+                    <h1 className="text-2xl font-bold text-gray-800 mb-6">Start Stocktake</h1>
+                    <div className="space-y-4">
+                        <button
+                            onClick={() => initializeStocktake('FULL')}
+                            className="w-full py-4 px-6 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition flex flex-col items-center"
+                        >
+                            <span className="text-lg font-bold">Full Count</span>
+                            <span className="text-sm opacity-90 mt-1">Replace current inventory counts</span>
+                        </button>
+                        
+                        <div className="relative flex py-2 items-center">
+                            <div className="flex-grow border-t border-gray-200"></div>
+                            <span className="flex-shrink-0 mx-4 text-gray-400 text-sm">OR</span>
+                            <div className="flex-grow border-t border-gray-200"></div>
+                        </div>
+
+                        <button
+                            onClick={() => initializeStocktake('ADDITION')}
+                            className="w-full py-4 px-6 bg-green-600 text-white rounded-xl hover:bg-green-700 transition flex flex-col items-center"
+                        >
+                            <span className="text-lg font-bold">Add Inventory</span>
+                            <span className="text-sm opacity-90 mt-1">Add to existing stock (e.g. Delivery)</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     if (loading && !report) return <div className="p-8 text-center">Loading Stocktake...</div>;
 
     // Report View
@@ -235,7 +286,7 @@ const StocktakePage: React.FC = () => {
             <div className="p-6 bg-gray-50 min-h-screen">
                 <div className="max-w-6xl mx-auto bg-white p-8 rounded-lg shadow">
                     <div className="flex justify-between items-center mb-6">
-                        <h1 className="text-2xl font-bold text-gray-800">Stocktake Report</h1>
+                        <h1 className="text-2xl font-bold text-gray-800">Stocktake Report ({session?.type === 'ADDITION' ? 'Addition' : 'Full Count'})</h1>
                         <button
                             onClick={() => window.location.reload()}
                             className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
@@ -249,22 +300,62 @@ const StocktakePage: React.FC = () => {
                             <thead>
                                 <tr className="bg-gray-100 text-gray-700 uppercase">
                                     <th className="p-3">Item</th>
-                                    <th className="p-3 text-right">Start</th>
+                                    <th className="p-3 text-right">System (Start)</th>
                                     <th className="p-3 text-right">Counted</th>
                                     <th className="p-3 text-right">Variance</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {report.map((row: any, idx: number) => (
-                                    <tr key={idx} className="border-b">
-                                        <td className="p-3">{row.item_name}</td>
-                                        <td className="p-3 text-right">{row.start_quantity}</td>
-                                        <td className="p-3 text-right">{row.end_quantity}</td>
-                                        <td className={`p-3 text-right ${row.variance < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                            {row.variance.toFixed(2)}
-                                        </td>
-                                    </tr>
-                                ))}
+                                {report.map((row: any, idx: number) => {
+                                    // For FULL count:
+                                    // end_quantity = What was counted
+                                    // variance = end_quantity - system_expected
+                                    // So: system_expected = end_quantity - variance
+                                    
+                                    // For ADDITION:
+                                    // end_quantity = New Total (Start + Added)
+                                    // start_quantity = Start
+                                    // received_quantity = Added
+                                    
+                                    let systemStart, counted, varianceDisplay;
+                                    
+                                    if (session?.type === 'ADDITION') {
+                                        systemStart = row.start_quantity;
+                                        counted = row.received_quantity; // The amount added
+                                        varianceDisplay = (
+                                            <span className="text-gray-500">
+                                                {row.end_quantity} (New Total)
+                                            </span>
+                                        );
+                                    } else {
+                                        systemStart = row.end_quantity - row.variance;
+                                        counted = row.end_quantity;
+                                        
+                                        const pct = systemStart !== 0 ? (row.variance / systemStart) * 100 : (row.variance !== 0 ? 100 : 0);
+                                        const isPositive = row.variance > 0;
+                                        const colorClass = row.variance === 0 ? 'text-gray-400' : (row.variance < 0 ? 'text-red-600' : 'text-green-600');
+                                        
+                                        varianceDisplay = (
+                                            <span className={colorClass}>
+                                                {isPositive ? '+' : ''}{row.variance.toFixed(2)} 
+                                                <span className="text-xs ml-1 opacity-75">
+                                                    ({isPositive ? '+' : ''}{pct.toFixed(1)}%)
+                                                </span>
+                                            </span>
+                                        );
+                                    }
+
+                                    return (
+                                        <tr key={idx} className="border-b">
+                                            <td className="p-3 font-medium">{row.item_name}</td>
+                                            <td className="p-3 text-right text-gray-600">{Number(systemStart).toFixed(2)}</td>
+                                            <td className="p-3 text-right font-bold">{Number(counted).toFixed(2)}</td>
+                                            <td className="p-3 text-right">
+                                                {varianceDisplay}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
@@ -277,7 +368,8 @@ const StocktakePage: React.FC = () => {
     if (activeLocation && items.length > 0) {
         const currentItem = items[currentItemIndex];
         const itemConversions = itemUnits[currentItem.id] || [];
-        const currentCount = currentCounts[currentItem.id] || { actual_quantity: '0', unit_name: currentItem.base_unit };
+        // Default to empty string (skipped) so "Mark as Zero" is not active by default
+        const currentCount = currentCounts[currentItem.id] || { actual_quantity: '', unit_name: currentItem.base_unit };
         const progress = ((currentItemIndex + 1) / items.length) * 100;
 
         return (
@@ -364,6 +456,34 @@ const StocktakePage: React.FC = () => {
                                         >
                                             <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
                                         </button>
+
+                                        {/* Zero Count Toggle */}
+                                        <button
+                                            onClick={() => {
+                                                // If already '0', toggle off (empty string). If not '0' (empty or other number), set to '0'.
+                                                const isZero = currentCount.actual_quantity === '0';
+                                                handleQuantityChange(currentItem.id, isZero ? '' : '0');
+                                            }}
+                                            className={`
+                                                mt-4 px-6 py-2 rounded-full text-sm font-bold transition-all flex items-center space-x-2
+                                                ${currentCount.actual_quantity === '0' 
+                                                    ? 'bg-blue-100 text-blue-700 border-2 border-blue-500 shadow-inner' 
+                                                    : 'bg-gray-50 text-gray-500 border-2 border-gray-200 hover:border-gray-300 hover:bg-gray-100'}
+                                            `}
+                                        >
+                                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors ${currentCount.actual_quantity === '0' ? 'border-blue-600 bg-blue-600' : 'border-gray-400 bg-transparent'}`}>
+                                                {currentCount.actual_quantity === '0' && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                                            </div>
+                                            <span>{currentCount.actual_quantity === '0' ? 'Counted as Zero' : 'Mark as Zero'}</span>
+                                        </button>
+                                        
+                                        {/* Status Text */}
+                                        <div className="mt-2 text-xs font-medium text-gray-400">
+                                            {currentCount.actual_quantity ? 
+                                                <span className="text-green-600">✓ Count Recorded</span> : 
+                                                <span className="text-gray-400">○ No Change (Skipped)</span>
+                                            }
+                                        </div>
                                     </div>
 
                                     {/* Unit Selector */}

@@ -1,5 +1,22 @@
 from rest_framework import serializers
 from .models import Item, Location, Inventory, UnitConversion, Recipe, RecipeIngredient, RecipeStep, RecipeStepIngredient, ProductionLog, VarianceLog, StoreItemSettings, ReceivingLog, StocktakeSession, StocktakeRecord, ExpiredItemLog
+import base64
+import uuid
+from django.core.files.base import ContentFile
+
+class Base64ImageField(serializers.ImageField):
+    def to_internal_value(self, data):
+        if isinstance(data, str) and data.startswith('data:image'):
+            # format: "data:image/png;base64,..."
+            try:
+                header, imgstr = data.split(';base64,')
+                ext = header.split('/')[-1]
+                if ext == 'jpeg':
+                    ext = 'jpg'
+                data = ContentFile(base64.b64decode(imgstr), name=f"{uuid.uuid4()}.{ext}")
+            except Exception:
+                raise serializers.ValidationError("Invalid Base64 image data")
+        return super().to_internal_value(data)
 
 class UnitConversionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -30,7 +47,9 @@ class RecipeStepIngredientSerializer(serializers.ModelSerializer):
         return "Unknown Location"
 
 class RecipeStepSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(required=False)
     ingredients = RecipeStepIngredientSerializer(many=True, read_only=True)
+    image = Base64ImageField(required=False, allow_null=True)
 
     class Meta:
         model = RecipeStep
@@ -109,9 +128,34 @@ class RecipeSerializer(serializers.ModelSerializer):
         
         # Update Steps
         if steps_data is not None:
-            instance.steps.all().delete()
+            existing_steps = {s.id: s for s in instance.steps.all()}
+            kept_ids = set()
+
             for step_data in steps_data:
-                RecipeStep.objects.create(recipe=instance, **step_data)
+                step_id = step_data.get('id')
+                if step_id and step_id in existing_steps:
+                    # Update existing
+                    step_obj = existing_steps[step_id]
+                    step_obj.step_number = step_data.get('step_number', step_obj.step_number)
+                    step_obj.instruction = step_data.get('instruction', step_obj.instruction)
+                    step_obj.caption = step_data.get('caption', step_obj.caption)
+                    
+                    if 'image' in step_data:
+                        step_obj.image = step_data['image']
+                    
+                    step_obj.save()
+                    kept_ids.add(step_id)
+                else:
+                    # Create new
+                    # id might be present but invalid or None, ensure it's not passed to create
+                    step_data.pop('id', None)
+                    new_step = RecipeStep.objects.create(recipe=instance, **step_data)
+                    kept_ids.add(new_step.id)
+
+            # Delete removed steps
+            for step_id, step_obj in existing_steps.items():
+                if step_id not in kept_ids:
+                    step_obj.delete()
                 
         # Update Ingredients
         if ingredients_data is not None:
@@ -216,7 +260,7 @@ class StocktakeSessionSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = StocktakeSession
-        fields = ['id', 'store', 'user', 'user_name', 'started_at', 'completed_at', 'status']
+        fields = ['id', 'store', 'user', 'user_name', 'started_at', 'completed_at', 'status', 'type']
         read_only_fields = ['store', 'user', 'started_at', 'completed_at', 'status']
 
 class ExpiredItemLogSerializer(serializers.ModelSerializer):

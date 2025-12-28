@@ -9,9 +9,28 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ims_mrp.settings')
 django.setup()
 
 from users.models import CustomUser, Store
-from inventory.models import Location, Item, UnitConversion, Recipe, RecipeStep, RecipeStepIngredient, Inventory, ProductionLog, RecipeIngredient, ExpiredItemLog, DailyUsage
+from inventory.models import Location, Item, UnitConversion, Recipe, RecipeStep, RecipeStepIngredient, Inventory, ProductionLog, RecipeIngredient, ExpiredItemLog, DailyUsage, StoreItemSettings
 
 def create_mock_data():
+    print("Flushing Database...")
+    # Flush all relevant tables
+    # Be careful with order due to foreign keys
+    Inventory.objects.all().delete()
+    ProductionLog.objects.all().delete()
+    DailyUsage.objects.all().delete()
+    ExpiredItemLog.objects.all().delete()
+    RecipeStepIngredient.objects.all().delete()
+    RecipeStep.objects.all().delete()
+    RecipeIngredient.objects.all().delete()
+    Recipe.objects.all().delete()
+    StoreItemSettings.objects.all().delete()
+    UnitConversion.objects.all().delete()
+    Item.objects.all().delete()
+    Location.objects.all().delete()
+    CustomUser.objects.all().delete()
+    Store.objects.all().delete()
+    print("Database Flushed.")
+
     print("Creating Mock Data...")
 
     # 1. Create Store
@@ -131,20 +150,49 @@ def create_mock_data():
     # 8. Inventory (Ingredients)
     today = timezone.now()
     
-    # Helper to create inventory with expiration
+    # Helper to create inventory with expiration and creation dates
     def create_inv(item_obj, qty, loc, days_until_expiry=None):
         exp_date = None
+        created_at = today # Default to created today
+
         if days_until_expiry is not None:
              exp_date = today + timedelta(days=days_until_expiry)
-        elif item_obj.shelf_life_days is not None:
-             exp_date = today + timedelta(days=item_obj.shelf_life_days)
+             # Backdate creation based on shelf life if we want consistency? 
+             # Or just set creation to now - (Shelf Life - days_until_expiry)
              
-        Inventory.objects.get_or_create(
+             # If item has shelf life, and we say it expires in X days, 
+             # it means it was created (Shelf Life - X) days ago.
+             if item_obj.shelf_life_days:
+                 days_elapsed = item_obj.shelf_life_days - days_until_expiry
+                 created_at = today - timedelta(days=days_elapsed)
+             else:
+                 # If no shelf life but we force expiration, just assume created today for simplicity
+                 # or backdate arbitrarily if expiry is in past
+                 if days_until_expiry < 0:
+                     created_at = today + timedelta(days=days_until_expiry) # Created in past
+
+        elif item_obj.shelf_life_days is not None:
+             # Fresh item
+             exp_date = today + timedelta(days=item_obj.shelf_life_days)
+             created_at = today
+             
+        # Use update_or_create to avoid duplicates if run multiple times without flush
+        # But user asked to erase data. We will handle erasure at start of script.
+        
+        inv, _ = Inventory.objects.get_or_create(
             store=store, 
             item=item_obj, 
             location=loc, 
-            defaults={'quantity': qty, 'expiration_date': exp_date}
+            defaults={'quantity': qty, 'expiration_date': exp_date, 'created_at': created_at}
         )
+        
+        # Force update created_at because get_or_create defaults might be ignored if exists,
+        # or auto_now_add might override on create.
+        # But we want to simulate old creation dates.
+        inv.created_at = created_at
+        inv.expiration_date = exp_date
+        inv.quantity = qty
+        inv.save()
 
     create_inv(flour, 5000, loc_pantry, 100)
     create_inv(sugar, 5000, loc_pantry, 200)

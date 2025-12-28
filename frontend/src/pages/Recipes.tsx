@@ -5,7 +5,7 @@ import { useSwipeable } from 'react-swipeable';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import CreateRecipeModal from '../components/CreateRecipeModal';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Edit } from 'lucide-react';
 
 interface RecipeStepIngredient {
     id: number;
@@ -24,6 +24,7 @@ interface RecipeStep {
 
 interface RecipeIngredient {
     id: number;
+    ingredient_item: number;
     item_name: string;
     quantity_required: number;
     base_unit: string;
@@ -34,6 +35,7 @@ interface RecipeIngredient {
 
 interface Recipe {
     id: number;
+    item: number;
     item_name: string;
     base_unit: string;
     yield_quantity: number;
@@ -99,6 +101,7 @@ const RecipesPage: React.FC = () => {
 
     const { user } = useAuth();
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
 
     useEffect(() => {
         fetchRecipes();
@@ -354,7 +357,7 @@ const RecipesPage: React.FC = () => {
             <div className="max-w-6xl mx-auto">
                 <div className="flex justify-between items-center mb-6">
                     <h1 className="text-2xl font-bold text-gray-800">Recipes</h1>
-                    {user?.role === 'admin' && (
+                    {user?.is_superuser && (
                         <button
                             onClick={() => setIsCreateModalOpen(true)}
                             className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-sm font-medium"
@@ -367,8 +370,12 @@ const RecipesPage: React.FC = () => {
 
                 <CreateRecipeModal
                     isOpen={isCreateModalOpen}
-                    onClose={() => setIsCreateModalOpen(false)}
+                    onClose={() => {
+                        setIsCreateModalOpen(false);
+                        setEditingRecipe(null);
+                    }}
                     onSuccess={fetchRecipes}
+                    initialRecipe={editingRecipe}
                 />
 
                 {recipes.length === 0 ? (
@@ -383,14 +390,27 @@ const RecipesPage: React.FC = () => {
                                 onClick={() => handleSelectRecipe(recipe)}
                                 className="bg-white rounded-xl shadow-sm border border-gray-200 hover:border-blue-500 hover:shadow-md transition-all cursor-pointer overflow-hidden group relative"
                             >
-                                {(user?.role === 'admin' || user?.role === 'it') && (
-                                    <button
-                                        onClick={(e) => handleDeleteRecipe(e, recipe.id)}
-                                        className="absolute top-4 right-4 p-2 bg-white text-gray-400 hover:text-red-600 rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                                        title="Delete Recipe"
-                                    >
-                                        <Trash2 className="w-5 h-5" />
-                                    </button>
+                                {user?.is_superuser && (
+                                    <>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setEditingRecipe(recipe);
+                                                setIsCreateModalOpen(true);
+                                            }}
+                                            className="absolute top-4 right-14 p-2 bg-white text-gray-400 hover:text-blue-600 rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                            title="Edit Recipe"
+                                        >
+                                            <Edit className="w-5 h-5" />
+                                        </button>
+                                        <button
+                                            onClick={(e) => handleDeleteRecipe(e, recipe.id)}
+                                            className="absolute top-4 right-4 p-2 bg-white text-gray-400 hover:text-red-600 rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                            title="Delete Recipe"
+                                        >
+                                            <Trash2 className="w-5 h-5" />
+                                        </button>
+                                    </>
                                 )}
                                 <div className="p-6">
                                     <h2 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-blue-600 pr-8">

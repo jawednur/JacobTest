@@ -41,16 +41,42 @@ class ItemViewSet(viewsets.ModelViewSet):
         user = self.request.user
         store = getattr(user, 'store', None)
         
-        # Backfill expiration dates if shelf life is set and inventory is missing it
-        if item.shelf_life_days is not None:
-             from .models import Inventory
-             from datetime import timedelta
-             from django.utils import timezone
-             
-             # Update all inventory for this item that lacks an expiration date
-             # Set to now + shelf life (Best effort correction)
-             new_expiry = timezone.now() + timedelta(days=item.shelf_life_days)
-             Inventory.objects.filter(item=item, expiration_date__isnull=True).update(expiration_date=new_expiry)
+        # Check if shelf life was updated
+        if 'shelf_life_days' in self.request.data:
+            from .models import Inventory
+            from datetime import timedelta
+            from django.utils import timezone
+            
+            # Recalculate expiration for ALL inventory of this item
+            # (Assuming changing the rule means we want to update current stock too)
+            # Strategy: 
+            # 1. For items with NO expiration date -> Set to Now + New Shelf Life
+            # 2. For items WITH expiration date -> We can't easily know when they were created to re-add the shelf life.
+            #    However, if the shelf life changed, the expiration date is likely wrong.
+            #    Simplest correct approach: Update all future expirations to respect new limit?
+            #    Better approach for now: Only update NULL expirations, as requested by user initially?
+            #    User said: "I updated this shelf life, but the expirations in the inventory were not updated."
+            #    This implies they expect existing dates to shift. 
+            #    But we don't track "Created At" on Inventory accurately enough to re-project.
+            #    Inventory doesn't have 'created_at'.
+            #    Wait, receiving logs do. But Inventory batches are simple.
+            
+            # Compromise: Update items that have NO expiration date OR update based on creation date if available.
+            # 1. Update items with NULL expiration
+            if item.shelf_life_days is not None:
+                 new_expiry = timezone.now() + timedelta(days=item.shelf_life_days)
+                 Inventory.objects.filter(item=item, expiration_date__isnull=True).update(expiration_date=new_expiry)
+                 
+                 # 2. Update items WITH creation date (recalculate correct expiry)
+                 # We can do this efficiently in the database using F expressions, but SQLite/Django date math support varies.
+                 # Let's iterate for safety or use a raw query if needed? 
+                 # Iteration for a single item type is usually fine unless massive scale.
+                 
+                 # Only update items that HAVE created_at
+                 items_with_creation = Inventory.objects.filter(item=item, created_at__isnull=False)
+                 for inv in items_with_creation:
+                     inv.expiration_date = inv.created_at + timedelta(days=item.shelf_life_days)
+                     inv.save()
         
         # Handle 'par' updates
         if store and 'par' in self.request.data:
@@ -471,6 +497,27 @@ class StocktakeSessionViewSet(viewsets.ModelViewSet):
             return StocktakeSession.objects.filter(store=store)
         return StocktakeSession.objects.none()
 
+    @action(detail=False, methods=['get'])
+    def current(self, request):
+        user = request.user
+        store = getattr(user, 'store', None)
+        
+        if not store:
+            store_id = request.query_params.get('store_id')
+            if (getattr(user, 'role', '') == 'it' or user.is_superuser) and store_id:
+                from .models import Store
+                try:
+                    store = Store.objects.get(id=store_id)
+                except Store.DoesNotExist:
+                     pass
+        
+        if store:
+            pending = StocktakeSession.objects.filter(store=store, status='PENDING').first()
+            if pending:
+                 return Response(StocktakeSessionSerializer(pending).data)
+        
+        return Response(None)
+
     @action(detail=False, methods=['post'])
     def start(self, request):
         user = request.user
@@ -492,8 +539,9 @@ class StocktakeSessionViewSet(viewsets.ModelViewSet):
         pending = StocktakeSession.objects.filter(store=store, status='PENDING').first()
         if pending:
              return Response(StocktakeSessionSerializer(pending).data)
-             
-        session = StocktakeSession.objects.create(store=store, user=user, status='PENDING')
+        
+        session_type = request.data.get('type', 'FULL')
+        session = StocktakeSession.objects.create(store=store, user=user, status='PENDING', type=session_type)
         return Response(StocktakeSessionSerializer(session).data)
 
     @action(detail=True, methods=['post'])
