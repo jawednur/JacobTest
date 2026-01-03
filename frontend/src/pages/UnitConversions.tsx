@@ -30,9 +30,17 @@ const UnitConversions: React.FC = () => {
         const fetchItems = async () => {
             try {
                 const data = await getItems();
-                setItems(data);
-                if (data.length > 0) {
-                    setSelectedItem(data[0]);
+                // Ensure data is array or handle pagination result object
+                let itemsArray: Item[] = [];
+                if (Array.isArray(data)) {
+                    itemsArray = data;
+                } else if ((data as any).results) {
+                    itemsArray = (data as any).results;
+                }
+
+                setItems(itemsArray);
+                if (itemsArray.length > 0) {
+                    setSelectedItem(itemsArray[0]);
                 }
             } catch (err) {
                 console.error("Failed to fetch items", err);
