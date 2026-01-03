@@ -218,32 +218,47 @@ class InventorySerializer(serializers.ModelSerializer):
         }
 
 class ProductionLogSerializer(serializers.ModelSerializer):
-    user_name = serializers.CharField(source='user.username', read_only=True)
-    recipe_name = serializers.CharField(source='recipe.item.name', read_only=True)
+    user_name = serializers.SerializerMethodField()
+    recipe_name = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductionLog
         fields = ['id', 'store', 'user', 'user_name', 'recipe', 'recipe_name', 'quantity_made', 'unit_type', 'target_location', 'timestamp']
         read_only_fields = ['store', 'user', 'timestamp']
 
+    def get_user_name(self, obj):
+        return obj.user.username if obj.user else None
+
+    def get_recipe_name(self, obj):
+        # Recipe can be nullable; guard to avoid AttributeError in serializers
+        if obj.recipe and obj.recipe.item:
+            return obj.recipe.item.name
+        return None
+
 class VarianceLogSerializer(serializers.ModelSerializer):
     item_name = serializers.CharField(source='item.name', read_only=True)
     location_name = serializers.CharField(source='location.name', read_only=True)
-    user_name = serializers.CharField(source='user.username', read_only=True)
+    user_name = serializers.SerializerMethodField()
 
     class Meta:
         model = VarianceLog
         fields = ['id', 'store', 'user', 'user_name', 'item', 'item_name', 'location', 'location_name', 'expected_quantity', 'actual_quantity', 'variance', 'timestamp']
         read_only_fields = ['store', 'user', 'timestamp']
 
+    def get_user_name(self, obj):
+        return obj.user.username if obj.user else None
+
 class ReceivingLogSerializer(serializers.ModelSerializer):
     item_name = serializers.CharField(source='item.name', read_only=True)
-    user_name = serializers.CharField(source='user.username', read_only=True)
+    user_name = serializers.SerializerMethodField()
 
     class Meta:
         model = ReceivingLog
         fields = ['id', 'store', 'user', 'user_name', 'item', 'item_name', 'quantity', 'unit_cost', 'timestamp']
         read_only_fields = ['store', 'user', 'timestamp']
+
+    def get_user_name(self, obj):
+        return obj.user.username if obj.user else None
 
 class StocktakeRecordSerializer(serializers.ModelSerializer):
     item_name = serializers.CharField(source='item.name', read_only=True)
@@ -256,19 +271,25 @@ class StocktakeRecordSerializer(serializers.ModelSerializer):
         read_only_fields = ['session']
 
 class StocktakeSessionSerializer(serializers.ModelSerializer):
-    user_name = serializers.CharField(source='user.username', read_only=True)
+    user_name = serializers.SerializerMethodField()
     
     class Meta:
         model = StocktakeSession
         fields = ['id', 'store', 'user', 'user_name', 'started_at', 'completed_at', 'status', 'type']
         read_only_fields = ['store', 'user', 'started_at', 'completed_at', 'status']
 
+    def get_user_name(self, obj):
+        return obj.user.username if obj.user else None
+
 class ExpiredItemLogSerializer(serializers.ModelSerializer):
     item_name = serializers.CharField(source='item.name', read_only=True)
-    user_name = serializers.CharField(source='user.username', read_only=True)
+    user_name = serializers.SerializerMethodField()
 
     class Meta:
         model = ExpiredItemLog
         fields = ['id', 'store', 'item', 'item_name', 'quantity_expired', 'disposed_at', 'user', 'user_name', 'notes']
         read_only_fields = ['store', 'user', 'disposed_at']
+
+    def get_user_name(self, obj):
+        return obj.user.username if obj.user else None
 

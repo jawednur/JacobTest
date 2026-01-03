@@ -253,7 +253,7 @@ const StocktakePage: React.FC = () => {
                     <div className="space-y-4">
                         <button
                             onClick={() => initializeStocktake('FULL')}
-                            className="w-full py-4 px-6 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition flex flex-col items-center"
+                            className="w-full py-4 px-6 bg-green-700 text-white rounded-xl hover:bg-blue-700 transition flex flex-col items-center border border-black"
                         >
                             <span className="text-lg font-bold">Full Count</span>
                             <span className="text-sm opacity-90 mt-1">Replace current inventory counts</span>
