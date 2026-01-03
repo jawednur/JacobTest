@@ -28,7 +28,12 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-test-key-replace-in-p
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
+# Allow configuring hosts via env, but ignore empty entries to avoid DisallowedHost.
+raw_allowed_hosts = os.environ.get('ALLOWED_HOSTS', '').split(',')
+ALLOWED_HOSTS = [host.strip() for host in raw_allowed_hosts if host.strip()]
+if not ALLOWED_HOSTS:
+    # Default permissive in debug; production defaults cover common Railway/localhost
+    ALLOWED_HOSTS = ['*'] if DEBUG else ['.railway.app', 'localhost', '127.0.0.1']
 
 
 # Application definition
@@ -86,13 +91,47 @@ WSGI_APPLICATION = 'ims_mrp.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
+DB_CONN_MAX_AGE = int(os.environ.get('DB_CONN_MAX_AGE', '600'))
+DB_SSL_REQUIRED = os.environ.get('DB_SSL_REQUIRED', 'False' if DEBUG else 'True').lower() == 'true'
 
-DATABASES = {
-    'default': dj_database_url.config(
-        default='sqlite:///' + str(BASE_DIR / 'db.sqlite3'),
-        conn_max_age=600
-    )
-}
+
+def build_database_url() -> str | None:
+    """
+    Resolve the database URL prioritizing Railway's provided variables,
+    then fall back to DATABASE_URL or discrete PG* variables. Defaults
+    to None so we can fall back to SQLite for local development.
+    """
+    if os.environ.get('DATABASE_URL'):
+        return os.environ['DATABASE_URL']
+    if os.environ.get('RAILWAY_DATABASE_URL'):
+        return os.environ['RAILWAY_DATABASE_URL']
+
+    pg_vars = ['PGHOST', 'PGPORT', 'PGUSER', 'PGPASSWORD', 'PGDATABASE']
+    if all(os.environ.get(var) for var in pg_vars):
+        return (
+            f"postgresql://{os.environ['PGUSER']}:{os.environ['PGPASSWORD']}"
+            f"@{os.environ['PGHOST']}:{os.environ['PGPORT']}/{os.environ['PGDATABASE']}"
+        )
+    return None
+
+
+database_url = build_database_url()
+
+if database_url:
+    DATABASES = {
+        'default': dj_database_url.parse(
+            database_url,
+            conn_max_age=DB_CONN_MAX_AGE,
+            ssl_require=DB_SSL_REQUIRED,
+        )
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
@@ -175,8 +214,18 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
 }
 
-# CORS Configuration
+# CORS / CSRF Configuration
 CORS_ALLOW_ALL_ORIGINS = DEBUG
 if not DEBUG:
     origins = os.environ.get('CORS_ALLOWED_ORIGINS', '').split(',')
     CORS_ALLOWED_ORIGINS = [origin for origin in origins if origin]
+
+raw_csrf_trusted = os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',')
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in raw_csrf_trusted if origin.strip()]
+if not DEBUG and not CSRF_TRUSTED_ORIGINS:
+    # Use ALLOWED_HOSTS as a fallback; Django requires scheme on CSRF origins.
+    CSRF_TRUSTED_ORIGINS = [
+        host if host.startswith('http') else f"https://{host.lstrip('.')}"
+        for host in ALLOWED_HOSTS
+        if host != '*'
+    ]

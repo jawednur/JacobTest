@@ -74,6 +74,14 @@ npm install
 npm run dev
 ```
 
+## Railway Deployment (Postgres)
+
+- Provide the Postgres connection string via `DATABASE_URL` (or `RAILWAY_DATABASE_URL`); the backend also assembles a URL from `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, and `PGDATABASE` if needed.
+- Leave SQLite for local dev only—production will automatically switch to Postgres when a URL is present.
+- Set `DB_SSL_REQUIRED=True` in Railway (defaults to `True` when `DEBUG` is `False`) and optionally tune `DB_CONN_MAX_AGE` (default `600`) for connection pooling.
+- Configure `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, and `CSRF_TRUSTED_ORIGINS` to the deployed domains, and run with `DEBUG=False`.
+- The backend `nixpacks.toml` and `Procfile` run migrations on startup and serve via Gunicorn.
+
 ## Documentation Standards
 This documentation and the recent refactoring follow best practices as verified by Context 7 (React & Django standards).
 
