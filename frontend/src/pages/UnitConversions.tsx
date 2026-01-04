@@ -43,7 +43,7 @@ const UnitConversions: React.FC = () => {
     useEffect(() => {
         const fetchItems = async () => {
             try {
-                const [itemsData, locationsData, inventoryData] = await Promise.all([
+                const [itemsData, locationsData, inventoryDataRaw] = await Promise.all([
                     getItems(),
                     getLocations(),
                     getFullInventory()
@@ -57,7 +57,7 @@ const UnitConversions: React.FC = () => {
                 }
 
                 setLocations(locationsData || []);
-                const invArray: InventoryEntry[] = Array.isArray(inventoryData) ? inventoryData : (inventoryData?.results || []);
+                const invArray: InventoryEntry[] = Array.isArray(inventoryDataRaw) ? inventoryDataRaw : ((inventoryDataRaw as any)?.results || []);
                 const locationMap = new Map<number, Set<number>>();
 
                 itemsArray.forEach(item => {
