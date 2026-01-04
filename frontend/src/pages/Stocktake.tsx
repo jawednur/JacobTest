@@ -328,16 +328,19 @@ const StocktakePage: React.FC = () => {
                                             </span>
                                         );
                                     } else {
-                                        systemStart = row.end_quantity - row.variance;
+                                        // Prefer explicit system_quantity from backend; fall back to derived
+                                        systemStart = row.system_quantity ?? row.start_quantity ?? (row.end_quantity - (row.variance ?? 0));
                                         counted = row.end_quantity;
-                                        
-                                        const pct = systemStart !== 0 ? (row.variance / systemStart) * 100 : (row.variance !== 0 ? 100 : 0);
-                                        const isPositive = row.variance > 0;
-                                        const colorClass = row.variance === 0 ? 'text-gray-400' : (row.variance < 0 ? 'text-red-600' : 'text-green-600');
+
+                                        // Recompute variance client-side to avoid display issues if backend value is missing
+                                        const varianceValue = counted - systemStart;
+                                        const pct = systemStart !== 0 ? (varianceValue / systemStart) * 100 : (varianceValue !== 0 ? 100 : 0);
+                                        const isPositive = varianceValue > 0;
+                                        const colorClass = varianceValue === 0 ? 'text-gray-400' : (varianceValue < 0 ? 'text-red-600' : 'text-green-600');
                                         
                                         varianceDisplay = (
                                             <span className={colorClass}>
-                                                {isPositive ? '+' : ''}{row.variance.toFixed(2)} 
+                                                {isPositive ? '+' : ''}{varianceValue.toFixed(2)} 
                                                 <span className="text-xs ml-1 opacity-75">
                                                     ({isPositive ? '+' : ''}{pct.toFixed(1)}%)
                                                 </span>

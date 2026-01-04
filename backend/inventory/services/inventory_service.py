@@ -155,23 +155,26 @@ class InventoryService:
                 
                 # Report Data Construction
                 if session.type == 'ADDITION':
-                     # For addition, we just show what was added
-                     report_data.append({
+                    # For addition, we just show what was added
+                    report_data.append({
                         'item_id': item_id,
                         'item_name': item.name,
                         'start_quantity': current_inventory,
-                        'received_quantity': total_counted, # effectively "received" in this session
+                        'system_quantity': current_inventory,  # Explicit expected qty before addition
+                        'received_quantity': total_counted,  # effectively "received" in this session
                         'end_quantity': current_inventory + total_counted,
-                        'actual_usage': 0, # Not calculating usage for addition session
+                        'actual_usage': 0,  # Not calculating usage for addition session
                         'theoretical_usage': 0,
                         'variance': 0,
                         'unit': item.base_unit
                     })
                 else:
+                    # FULL stocktake: include system quantity (expected before reconciliation)
                     report_data.append({
                         'item_id': item_id,
                         'item_name': item.name,
                         'start_quantity': start_qty,
+                        'system_quantity': current_inventory,
                         'received_quantity': received_qty,
                         'end_quantity': total_counted,
                         'actual_usage': actual_usage,

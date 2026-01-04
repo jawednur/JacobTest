@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getRecipesList, deleteRecipe } from '../services/api';
+import { getRecipesList, deleteRecipe, getItemConversions } from '../services/api';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useSwipeable } from 'react-swipeable';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -31,6 +31,13 @@ interface RecipeIngredient {
     display_quantity: number;
     display_unit: string;
     location_name: string;
+}
+
+interface UnitConversion {
+    id: number;
+    unit_name: string;
+    factor: number;
+    is_default_display?: boolean;
 }
 
 interface Recipe {
@@ -88,6 +95,8 @@ const RecipesPage: React.FC = () => {
     const [recipes, setRecipes] = useState<Recipe[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
+    const [ingredientConversions, setIngredientConversions] = useState<Record<number, UnitConversion[]>>({});
+    const [activeIngredientUnits, setActiveIngredientUnits] = useState<Record<number, string>>({});
 
     // Navigation & Query Params
     const [searchParams] = useSearchParams();
@@ -125,6 +134,116 @@ const RecipesPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    // Preload conversion data for the selected recipe's ingredients so we can toggle units client-side.
+    useEffect(() => {
+        if (!selectedRecipe || !selectedRecipe.ingredients) {
+            setIngredientConversions({});
+            setActiveIngredientUnits({});
+            return;
+        }
+
+        // Initialize with whatever unit the API provided (display_unit) to avoid flash of incorrect values.
+        const initialUnits: Record<number, string> = {};
+        selectedRecipe.ingredients.forEach(ing => {
+            initialUnits[ing.id] = ing.display_unit || ing.base_unit;
+        });
+        setActiveIngredientUnits(initialUnits);
+
+        const ingredientItemIds = Array.from(new Set(selectedRecipe.ingredients.map(ing => ing.ingredient_item)));
+        if (ingredientItemIds.length === 0) {
+            setIngredientConversions({});
+            return;
+        }
+
+        let isCancelled = false;
+        (async () => {
+            try {
+                const results = await Promise.all(
+                    ingredientItemIds.map(async (itemId) => {
+                        try {
+                            const convs = await getItemConversions(itemId);
+                            return { itemId, conversions: convs || [] };
+                        } catch (err) {
+                            console.error(`Failed to load conversions for item ${itemId}`, err);
+                            return { itemId, conversions: [] as UnitConversion[] };
+                        }
+                    })
+                );
+
+                if (!isCancelled) {
+                    setIngredientConversions(prev => {
+                        const next = { ...prev };
+                        results.forEach(({ itemId, conversions }) => {
+                            next[itemId] = conversions;
+                        });
+                        return next;
+                    });
+                }
+            } catch (err) {
+                console.error("Error fetching ingredient conversions", err);
+            }
+        })();
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [selectedRecipe]);
+
+    const getUnitsForIngredient = (ing: RecipeIngredient) => {
+        const conversions = ingredientConversions[ing.ingredient_item] || [];
+        const unitMap = new Map<string, number>();
+
+        unitMap.set(ing.base_unit, 1);
+
+        if (ing.display_unit) {
+            const inferredFactor = ing.display_unit !== ing.base_unit && ing.display_quantity
+                ? ing.quantity_required / ing.display_quantity
+                : 1;
+            if (!unitMap.has(ing.display_unit)) {
+                unitMap.set(ing.display_unit, inferredFactor || 1);
+            }
+        }
+
+        conversions.forEach(conv => {
+            if (conv.factor > 0 && !unitMap.has(conv.unit_name)) {
+                unitMap.set(conv.unit_name, conv.factor);
+            }
+        });
+
+        return Array.from(unitMap.entries()).map(([unit_name, factor]) => ({
+            unit_name,
+            factor: factor || 1,
+        }));
+    };
+
+    const getDisplayForIngredient = (ing: RecipeIngredient) => {
+        const units = getUnitsForIngredient(ing);
+        if (units.length === 0) {
+            return { quantity: ing.display_quantity || ing.quantity_required, unit: ing.display_unit || ing.base_unit };
+        }
+
+        const activeUnit = activeIngredientUnits[ing.id] || ing.display_unit || ing.base_unit;
+        const targetUnit = units.find(u => u.unit_name === activeUnit) || units[0];
+        const factor = targetUnit.factor && targetUnit.factor > 0 ? targetUnit.factor : 1;
+        const quantity = targetUnit.unit_name === ing.display_unit && typeof ing.display_quantity === 'number'
+            ? ing.display_quantity
+            : ing.quantity_required / factor;
+
+        return { quantity, unit: targetUnit.unit_name };
+    };
+
+    const handleCycleUnit = (ing: RecipeIngredient) => {
+        const units = getUnitsForIngredient(ing);
+        if (units.length === 0) return;
+
+        const activeUnit = activeIngredientUnits[ing.id] || ing.display_unit || ing.base_unit;
+        const currentIdx = units.findIndex(u => u.unit_name === activeUnit);
+        const nextIdx = currentIdx === -1 || currentIdx === units.length - 1 ? 0 : currentIdx + 1;
+        const nextUnit = units[nextIdx].unit_name;
+
+        setActiveIngredientUnits(prev => ({ ...prev, [ing.id]: nextUnit }));
     };
 
     const handleSelectRecipe = (recipe: Recipe) => {
@@ -249,23 +368,39 @@ const RecipesPage: React.FC = () => {
                                         <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Ingredients</h3>
                                         {selectedRecipe.ingredients && selectedRecipe.ingredients.length > 0 ? (
                                             <ul className="space-y-3">
-                                                {selectedRecipe.ingredients.map(ing => (
-                                                    <li key={ing.id} className="flex justify-between items-center text-sm">
-                                                        <div>
-                                                            <span className="font-medium text-gray-900">{ing.item_name}</span>
-                                                            {ing.location_name && (
-                                                                <div className="text-xs text-gray-500">{ing.location_name}</div>
-                                                            )}
-                                                        </div>
-                                                        <span className="bg-gray-100 text-gray-800 font-bold px-2 py-1 rounded">
-                                                            {formatQuantity(ing.display_quantity)} {ing.display_unit}
-                                                        </span>
-                                                    </li>
-                                                ))}
+                                                {selectedRecipe.ingredients.map(ing => {
+                                                    const display = getDisplayForIngredient(ing);
+                                                    return (
+                                                        <li key={ing.id} className="flex justify-between items-center text-sm">
+                                                            <div>
+                                                                <span className="font-medium text-gray-900">{ing.item_name}</span>
+                                                                {ing.location_name && (
+                                                                    <div className="text-xs text-gray-500">{ing.location_name}</div>
+                                                                )}
+                                                            </div>
+                                                            <span
+                                                                role="button"
+                                                                tabIndex={0}
+                                                                title="Click to switch units"
+                                                                onClick={() => handleCycleUnit(ing)}
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                                        e.preventDefault();
+                                                                        handleCycleUnit(ing);
+                                                                    }
+                                                                }}
+                                                                className="bg-gray-100 text-gray-800 font-bold px-2 py-1 rounded cursor-pointer hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                                            >
+                                                                {formatQuantity(display.quantity)} {display.unit}
+                                                            </span>
+                                                        </li>
+                                                    );
+                                                })}
                                             </ul>
                                         ) : (
                                             <p className="text-gray-500 italic">No ingredients listed.</p>
                                         )}
+                                        <p className="text-xs text-gray-400 mt-3">Tap a measurement to view it in other available units.</p>
                                     </div>
 
                                     <div className="p-4 bg-gray-50 text-center border-t text-gray-500 text-sm">
