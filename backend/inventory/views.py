@@ -5,6 +5,7 @@ from rest_framework.decorators import action
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.db.models import Q, Sum
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from .models import Item, Inventory, ProductionLog, VarianceLog, Location, UnitConversion, Recipe, ReceivingLog, StocktakeSession, StocktakeRecord, ExpiredItemLog, RecipeIngredient, DailyUsage
 from .serializers import ItemSerializer, InventorySerializer, ProductionLogSerializer, VarianceLogSerializer, LocationSerializer, UnitConversionSerializer, RecipeSerializer, ReceivingLogSerializer, StocktakeSessionSerializer, StocktakeRecordSerializer, ExpiredItemLogSerializer
 from .services.inventory_service import InventoryService
@@ -22,13 +23,36 @@ class ItemViewSet(viewsets.ModelViewSet):
     filterset_fields = ['type']
     search_fields = ['name']
 
+    def _is_super(self, user):
+        return getattr(user, 'role', '') == 'it' or user.is_superuser or user.is_staff
+
     def get_queryset(self):
         user = self.request.user
         store = getattr(user, 'store', None)
         
-        # IT Admin / Superuser sees all
-        if getattr(user, 'role', '') == 'it' or user.is_superuser or user.is_staff:
-            return Item.objects.all()
+        # IT Admin / Superuser sees all with optional scope filtering
+        if self._is_super(user):
+            qs = Item.objects.all()
+            scope = self.request.query_params.get('scope')
+            store_id_param = self.request.query_params.get('store_id')
+
+            # Backward-compatible explicit store filter
+            if store_id_param:
+                try:
+                    qs = qs.filter(store_id=int(store_id_param))
+                except (TypeError, ValueError):
+                    pass
+
+            if scope:
+                if scope == 'global':
+                    qs = qs.filter(store__isnull=True)
+                elif scope.startswith('store:'):
+                    try:
+                        scope_store_id = int(scope.split(':', 1)[1])
+                        qs = qs.filter(store_id=scope_store_id)
+                    except (TypeError, ValueError, IndexError):
+                        pass
+            return qs
 
         if store:
             # Show Global Items + Store-Specific Items
@@ -37,6 +61,18 @@ class ItemViewSet(viewsets.ModelViewSet):
         return Item.objects.filter(store__isnull=True)
 
     def perform_update(self, serializer):
+        user = self.request.user
+        store = getattr(user, 'store', None)
+        item = serializer.instance
+
+        # Permissions: editing global items requires super/IT. Editing store items must match store unless super.
+        if item.store is None and not self._is_super(user):
+            raise PermissionDenied("Only super users can edit global items.")
+        if item.store is not None and not self._is_super(user) and item.store != store:
+            raise PermissionDenied("Cannot edit items from another store.")
+        if not self._is_super(user) and 'store' in self.request.data:
+            raise PermissionDenied("Store cannot be reassigned.")
+
         item = serializer.save()
         user = self.request.user
         store = getattr(user, 'store', None)
@@ -103,11 +139,32 @@ class ItemViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         user = self.request.user
         store = getattr(user, 'store', None)
+        is_super = self._is_super(user)
+
+        # Determine target store based on permissions and payload
+        is_global = str(self.request.data.get('is_global', 'false')).lower() in ['true', '1', 'yes']
+        target_store = None
+
+        if is_global:
+            if not is_super:
+                raise PermissionDenied("Only super users can create global items.")
+            target_store = None
+        else:
+            if is_super and self.request.data.get('store'):
+                from users.models import Store
+                try:
+                    target_store = Store.objects.get(id=self.request.data.get('store'))
+                except Store.DoesNotExist:
+                    raise ValidationError("Provided store does not exist.")
+            else:
+                if not store:
+                    raise ValidationError("Store context required to create store items.")
+                target_store = store
+
+        # Save item with resolved store context
+        item = serializer.save(store=target_store)
         
-        # Save item with store context
-        item = serializer.save(store=store)
-        
-        if store:
+        if target_store:
             from .models import StoreItemSettings
             # We can create settings immediately
             par_value = 0.0
@@ -126,10 +183,69 @@ class ItemViewSet(viewsets.ModelViewSet):
                     pass
 
             if par_value > 0 or location_id:
-                StoreItemSettings.objects.create(store=store, item=item, par=par_value, default_location_id=location_id)
+                StoreItemSettings.objects.create(store=target_store, item=item, par=par_value, default_location_id=location_id)
             
             # Removed auto-create recipe logic to prevent duplicates when creating via CreateRecipeModal
+    
+    @action(detail=True, methods=['post', 'patch'], url_path='configure_for_store')
+    def configure_for_store(self, request, pk=None):
+        """
+        Store-level configuration for a global item (par/default_location).
+        """
+        item = self.get_object()
+        if item.store_id is not None:
+            return Response({"detail": "Configuration endpoint is only for global items."}, status=status.HTTP_400_BAD_REQUEST)
 
+        user = request.user
+        store = getattr(user, 'store', None)
+        target_store = store
+
+        # Allow super/IT to configure on behalf of a store via payload
+        if not store and self._is_super(user) and request.data.get('store_id'):
+            from users.models import Store
+            try:
+                target_store = Store.objects.get(id=request.data.get('store_id'))
+            except Store.DoesNotExist:
+                return Response({"detail": "Store not found."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not target_store:
+            return Response({"detail": "No store context available for configuration."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate inputs before touching the DB
+        par_value = None
+        if 'par' in request.data:
+            try:
+                par_value = float(request.data.get('par')) if request.data.get('par') is not None else None
+            except (ValueError, TypeError):
+                return Response({"detail": "Invalid par value."}, status=status.HTTP_400_BAD_REQUEST)
+
+        default_location_obj = None
+        if 'default_location' in request.data:
+            raw_loc = request.data.get('default_location')
+            if raw_loc not in [None, '', 'null']:
+                try:
+                    loc_id = int(raw_loc)
+                    default_location_obj = Location.objects.filter(id=loc_id, store=target_store).first()
+                    if not default_location_obj:
+                        return Response({"detail": "Location not found for this store."}, status=status.HTTP_400_BAD_REQUEST)
+                except (ValueError, TypeError):
+                    return Response({"detail": "Invalid default_location value."}, status=status.HTTP_400_BAD_REQUEST)
+
+        from .models import StoreItemSettings
+        settings, _ = StoreItemSettings.objects.get_or_create(store=target_store, item=item)
+
+        if par_value is not None:
+            settings.par = par_value
+        if 'default_location' in request.data:
+            settings.default_location = default_location_obj
+
+        settings.save()
+        return Response({
+            "item": item.id,
+            "store": target_store.id,
+            "par": settings.par,
+            "default_location": settings.default_location.id if settings.default_location else None
+        })
 
 class RecipeViewSet(viewsets.ModelViewSet):
     """
@@ -141,6 +257,10 @@ class RecipeViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_fields = ['item']
     search_fields = ['item__name']
+
+    def _can_manage(self, user):
+        # Admin/IT/superusers can create/update/delete recipes
+        return getattr(user, 'role', '') in ['admin', 'it'] or user.is_superuser or user.is_staff
 
     def get_queryset(self):
         user = self.request.user
@@ -154,6 +274,21 @@ class RecipeViewSet(viewsets.ModelViewSet):
              return Recipe.objects.filter(item__in=visible_items)
         
         return Recipe.objects.filter(item__store__isnull=True)
+
+    def perform_create(self, serializer):
+        if not self._can_manage(self.request.user):
+            raise PermissionDenied("Only admins/IT/superusers can create recipes.")
+        serializer.save()
+
+    def perform_update(self, serializer):
+        if not self._can_manage(self.request.user):
+            raise PermissionDenied("Only admins/IT/superusers can update recipes.")
+        super().perform_update(serializer)
+
+    def perform_destroy(self, instance):
+        if not self._can_manage(self.request.user):
+            raise PermissionDenied("Only admins/IT/superusers can delete recipes.")
+        super().perform_destroy(instance)
 
 
 class InventoryViewSet(viewsets.ModelViewSet):
@@ -300,14 +435,12 @@ class ProductionLogViewSet(viewsets.ModelViewSet):
         store = getattr(user, 'store', None)
         force = self.request.data.get('force_creation', False)
         
+        # Require the user's store to associate production logs with their store context
+        if not store:
+            raise PermissionDenied("User must belong to a store to log production.")
+
         # 1. Create instance in memory
-        if store:
-             production_log = serializer.save(user=user, store=store)
-        else:
-             # IT user creating log? Might need to specify store in serializer?
-             # For now, allow save without store if model allows (model says store is FK non-null)
-             # If IT user tries to create without store, it will fail DB constraint unless provided in data
-             production_log = serializer.save(user=user)
+        production_log = serializer.save(user=user, store=store)
         
         # 2. Process logic (Check + Deduct)
         # Note: We removed the signal, so we MUST call this manually.

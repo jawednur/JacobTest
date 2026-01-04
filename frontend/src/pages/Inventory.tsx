@@ -6,6 +6,7 @@ interface InventoryItem {
   item: number; // Item ID
   item_name: string;
   item_type: string;
+  base_unit?: string;
   location_name: string;
   quantity: number;
   expiration_date: string | null;
@@ -27,6 +28,11 @@ const InventoryPage: React.FC = () => {
   // State to track clicked items for unit toggling
   // Map: inventoryId -> { currentUnit: string, factor: number, availableUnits: UnitConversion[] }
   const [displayUnits, setDisplayUnits] = useState<{[key: number]: {currentUnit: string, factor: number, availableUnits: UnitConversion[]}}>({});
+
+  const formatQuantity = (val: number) => {
+    if (Number.isInteger(val)) return val.toString();
+    return val.toFixed(2).replace(/\.00$/, '');
+  };
 
   useEffect(() => {
     const fetchInventory = async () => {
@@ -59,6 +65,7 @@ const InventoryPage: React.FC = () => {
   }, [filterType, sortOrder]);
 
   const handleQuantityClick = async (invItem: InventoryItem) => {
+      const baseUnit = invItem.base_unit || 'Base Unit';
       // If we already have units loaded, cycle to the next one
       if (displayUnits[invItem.id]) {
           const currentstate = displayUnits[invItem.id];
@@ -94,25 +101,20 @@ const InventoryPage: React.FC = () => {
               // We will add a "Base" option with factor 1.
               
               const allUnits = [
-                  { id: -1, unit_name: 'Base Unit', factor: 1.0 },
+                  { id: -1, unit_name: baseUnit, factor: 1.0 },
                   ...conversions
               ];
 
-              if (conversions.length > 0) {
-                   // Switch to first converted unit immediately for feedback
-                   const firstConv = conversions[0];
-                   setDisplayUnits(prev => ({
-                       ...prev,
-                       [invItem.id]: {
-                           currentUnit: firstConv.unit_name,
-                           factor: firstConv.factor,
-                           availableUnits: allUnits
-                       }
-                   }));
-              } else {
-                  // No conversions available
-                  alert("No alternative units defined for this item.");
-              }
+              // If there are conversions, start toggling with the first conversion; else stay on base.
+              const nextUnit = conversions.length > 0 ? conversions[0] : allUnits[0];
+              setDisplayUnits(prev => ({
+                  ...prev,
+                  [invItem.id]: {
+                      currentUnit: nextUnit.unit_name,
+                      factor: nextUnit.factor,
+                      availableUnits: allUnits
+                  }
+              }));
 
           } catch (err) {
               console.error("Failed to load conversions", err);
@@ -121,12 +123,14 @@ const InventoryPage: React.FC = () => {
   };
 
   const getDisplayQuantity = (item: InventoryItem) => {
+      const baseUnit = item.base_unit || 'Base Unit';
       const state = displayUnits[item.id];
       if (state && state.factor > 0) {
           const val = item.quantity / state.factor;
-          return `${val.toFixed(2).replace(/\.00$/, '')} ${state.currentUnit}`;
+          return `${formatQuantity(val)} ${state.currentUnit}`;
       }
-      return item.quantity; // Default (Base)
+      // Default: show base unit immediately
+      return `${formatQuantity(item.quantity)} ${baseUnit}`;
   };
 
   return (

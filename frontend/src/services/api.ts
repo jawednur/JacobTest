@@ -24,9 +24,22 @@ export const getAnalytics = async () => {
   return response.data;
 };
 
-export const getItems = async () => {
+export const getItems = async (params?: Record<string, any>) => {
   let results: any[] = [];
   let url: string | null = '/inventory/items/';
+
+  if (params && Object.keys(params).length > 0) {
+    const search = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        search.append(key, String(value));
+      }
+    });
+    const qs = search.toString();
+    if (qs.length > 0) {
+      url += `?${qs}`;
+    }
+  }
 
   while (url) {
     try {
@@ -69,6 +82,11 @@ export const createItem = async (itemData: any) => {
 
 export const updateItem = async (id: number, itemData: any) => {
   const response = await api.patch(`/inventory/items/${id}/`, itemData);
+  return response.data;
+};
+
+export const configureItemForStore = async (id: number, data: { par?: number; default_location?: number | null; store_id?: number }) => {
+  const response = await api.post(`/inventory/items/${id}/configure_for_store/`, data);
   return response.data;
 };
 
@@ -267,6 +285,11 @@ export const updateUser = async (id: number, userData: any) => {
 export const getStores = async () => {
   const response = await api.get('/users/stores/');
   return response.data.results || response.data;
+};
+
+export const createStore = async (storeData: any) => {
+  const response = await api.post('/users/stores/', storeData);
+  return response.data;
 };
 
 export const createRecipe = async (data: any) => {

@@ -100,6 +100,7 @@ const RecipesPage: React.FC = () => {
     const [slideDirection, setSlideDirection] = useState(0);
 
     const { user } = useAuth();
+    const canManageRecipes = user?.role === 'admin' || user?.role === 'it' || user?.is_superuser || user?.is_staff;
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
 
@@ -357,7 +358,7 @@ const RecipesPage: React.FC = () => {
             <div className="max-w-6xl mx-auto">
                 <div className="flex justify-between items-center mb-6">
                     <h1 className="text-2xl font-bold text-gray-800">Recipes</h1>
-                    {user?.is_superuser && (
+                    {canManageRecipes && (
                         <button
                             onClick={() => setIsCreateModalOpen(true)}
                             className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-sm font-medium"
@@ -390,7 +391,7 @@ const RecipesPage: React.FC = () => {
                                 onClick={() => handleSelectRecipe(recipe)}
                                 className="bg-white rounded-xl shadow-sm border border-gray-200 hover:border-blue-500 hover:shadow-md transition-all cursor-pointer overflow-hidden group relative"
                             >
-                                {user?.is_superuser && (
+                                {canManageRecipes && (
                                     <>
                                         <button
                                             onClick={(e) => {

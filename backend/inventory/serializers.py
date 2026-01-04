@@ -49,7 +49,8 @@ class RecipeStepIngredientSerializer(serializers.ModelSerializer):
 class RecipeStepSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(required=False)
     ingredients = RecipeStepIngredientSerializer(many=True, read_only=True)
-    image = Base64ImageField(required=False, allow_null=True)
+    # Accept plain URL/text for images; upload handling is not implemented
+    image = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
     class Meta:
         model = RecipeStep
@@ -169,10 +170,13 @@ class ItemSerializer(serializers.ModelSerializer):
     par = serializers.SerializerMethodField()
     default_location = serializers.SerializerMethodField()
     conversions = UnitConversionSerializer(many=True, read_only=True)
+    store_name = serializers.CharField(source='store.name', read_only=True)
+    is_global = serializers.SerializerMethodField()
 
     class Meta:
         model = Item
-        fields = ['id', 'name', 'type', 'base_unit', 'shelf_life_days', 'par', 'default_location', 'conversions']
+        fields = ['id', 'name', 'type', 'base_unit', 'shelf_life_days', 'par', 'default_location', 'conversions', 'store', 'store_name', 'is_global']
+        read_only_fields = ['store']
 
     def get_par(self, obj):
         user = self.context.get('request').user if self.context.get('request') else None
@@ -194,6 +198,9 @@ class ItemSerializer(serializers.ModelSerializer):
                 return settings.default_location.id
         return None
 
+    def get_is_global(self, obj):
+        return obj.store_id is None
+
 class StoreItemSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = StoreItemSettings
@@ -209,10 +216,11 @@ class InventorySerializer(serializers.ModelSerializer):
     item_type = serializers.CharField(source='item.type', read_only=True)
     location_name = serializers.CharField(source='location.name', read_only=True)
     store_name = serializers.CharField(source='store.name', read_only=True)
+    base_unit = serializers.CharField(source='item.base_unit', read_only=True)
 
     class Meta:
         model = Inventory
-        fields = ['id', 'store', 'store_name', 'location', 'location_name', 'item', 'item_name', 'item_type', 'quantity', 'expiration_date']
+        fields = ['id', 'store', 'store_name', 'location', 'location_name', 'item', 'item_name', 'item_type', 'base_unit', 'quantity', 'expiration_date']
         extra_kwargs = {
             'store': {'required': False} 
         }

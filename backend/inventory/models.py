@@ -107,7 +107,8 @@ class RecipeStep(models.Model):
     recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE, related_name='steps')
     step_number = models.PositiveIntegerField()
     instruction = models.TextField()
-    image = models.ImageField(upload_to='recipe_steps/', null=True, blank=True)
+    # Image is a URL/text reference only (no upload handling implemented yet)
+    image = models.URLField(max_length=500, null=True, blank=True)
     caption = models.CharField(max_length=255, blank=True)
 
     class Meta:

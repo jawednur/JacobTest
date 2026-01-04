@@ -1,10 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import { getItems, getItemConversions, createUnitConversion, deleteUnitConversion } from '../services/api';
+import React, { useState, useEffect, useMemo } from 'react';
+import { getItems, getItemConversions, createUnitConversion, deleteUnitConversion, getLocations, getFullInventory } from '../services/api';
 
 interface Item {
     id: number;
     name: string;
     base_unit: string;
+    default_location?: number | null;
+}
+
+interface Location {
+    id: number;
+    name: string;
+}
+
+interface InventoryEntry {
+    item: number;
+    location: number | null;
 }
 
 interface UnitConversion {
@@ -20,6 +31,9 @@ const UnitConversions: React.FC = () => {
     const [selectedItem, setSelectedItem] = useState<Item | null>(null);
     const [conversions, setConversions] = useState<UnitConversion[]>([]);
     const [loading, setLoading] = useState(true);
+    const [locations, setLocations] = useState<Location[]>([]);
+    const [selectedLocation, setSelectedLocation] = useState<number | 'all'>('all');
+    const [itemLocations, setItemLocations] = useState<Map<number, Set<number>>>(new Map());
     
     // Form State
     const [newUnitName, setNewUnitName] = useState('');
@@ -29,15 +43,40 @@ const UnitConversions: React.FC = () => {
     useEffect(() => {
         const fetchItems = async () => {
             try {
-                const data = await getItems();
+                const [itemsData, locationsData, inventoryData] = await Promise.all([
+                    getItems(),
+                    getLocations(),
+                    getFullInventory()
+                ]);
                 // Ensure data is array or handle pagination result object
                 let itemsArray: Item[] = [];
-                if (Array.isArray(data)) {
-                    itemsArray = data;
-                } else if ((data as any).results) {
-                    itemsArray = (data as any).results;
+                if (Array.isArray(itemsData)) {
+                    itemsArray = itemsData;
+                } else if ((itemsData as any).results) {
+                    itemsArray = (itemsData as any).results;
                 }
 
+                setLocations(locationsData || []);
+                const invArray: InventoryEntry[] = Array.isArray(inventoryData) ? inventoryData : (inventoryData?.results || []);
+                const locationMap = new Map<number, Set<number>>();
+
+                itemsArray.forEach(item => {
+                    if (item.default_location) {
+                        const set = locationMap.get(item.id) || new Set<number>();
+                        set.add(item.default_location);
+                        locationMap.set(item.id, set);
+                    }
+                });
+
+                invArray.forEach(entry => {
+                    if (entry.location) {
+                        const set = locationMap.get(entry.item) || new Set<number>();
+                        set.add(entry.location);
+                        locationMap.set(entry.item, set);
+                    }
+                });
+
+                setItemLocations(locationMap);
                 setItems(itemsArray);
                 if (itemsArray.length > 0) {
                     setSelectedItem(itemsArray[0]);
@@ -57,6 +96,27 @@ const UnitConversions: React.FC = () => {
             fetchConversions(selectedItem.id);
         }
     }, [selectedItem]);
+
+    const filteredItems = useMemo(() => {
+        if (selectedLocation === 'all') return items;
+        return items.filter(item => {
+            const locs = itemLocations.get(item.id);
+            return locs ? locs.has(selectedLocation) : false;
+        });
+    }, [items, selectedLocation, itemLocations]);
+
+    useEffect(() => {
+        // When the filter changes, keep selection within the filtered list
+        if (!filteredItems.length) {
+            setSelectedItem(null);
+            setConversions([]);
+            return;
+        }
+
+        if (!selectedItem || !filteredItems.some(i => i.id === selectedItem.id)) {
+            setSelectedItem(filteredItems[0]);
+        }
+    }, [filteredItems, selectedItem]);
 
     const fetchConversions = async (itemId: number) => {
         try {
@@ -106,14 +166,32 @@ const UnitConversions: React.FC = () => {
     return (
         <div className="p-6 bg-gray-50 min-h-screen">
             <div className="max-w-4xl mx-auto">
-                <h1 className="text-3xl font-bold text-gray-800 mb-6">Unit Conversion Management</h1>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+                    <h1 className="text-3xl font-bold text-gray-800">Unit Conversion Management</h1>
+                    <div className="flex items-center gap-2">
+                        <label className="text-sm font-medium text-gray-700">Filter by Location</label>
+                        <select
+                            value={selectedLocation}
+                            onChange={e => setSelectedLocation(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                            className="border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                        >
+                            <option value="all">All</option>
+                            {locations.map(loc => (
+                                <option key={loc.id} value={loc.id}>{loc.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
                 
                 <div className="flex flex-col md:flex-row gap-6">
                     {/* Sidebar: Item Selection */}
                     <div className="w-full md:w-1/3 bg-white rounded-lg shadow-md p-4 max-h-[calc(100vh-200px)] overflow-y-auto">
                         <h2 className="text-lg font-semibold mb-4 text-gray-700">Select Item</h2>
                         <div className="space-y-2">
-                            {items.map(item => (
+                            {filteredItems.length === 0 && (
+                                <p className="text-gray-400 text-sm italic">No items for this location.</p>
+                            )}
+                            {filteredItems.map(item => (
                                 <button
                                     key={item.id}
                                     onClick={() => setSelectedItem(item)}

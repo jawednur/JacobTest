@@ -69,20 +69,8 @@ interface StepInput {
     id?: number;
     step_number: number;
     instruction: string;
-    image_url?: string; // Existing or preview
-    new_image?: string; // Base64 for upload
-    image_deleted?: boolean;
+    image_url?: string; // URL reference only
 }
-
-// Helper to read file as Base64
-const readFileAsDataURL = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
-};
 
 interface CreateRecipeModalProps {
     isOpen: boolean;
@@ -138,10 +126,10 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
                     id: s.id,
                     step_number: s.step_number,
                     instruction: s.instruction,
-                    image_url: s.image // Assuming backend returns full URL or path
+                    image_url: s.image || ''
                 })));
             } else {
-                setSteps([{ step_number: 1, instruction: '' }]);
+                setSteps([{ step_number: 1, instruction: '', image_url: '' }]);
             }
 
             setIsNewProduct(false);
@@ -154,7 +142,7 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
             setShelfLife(1);
             setYieldQuantity(1);
             setRecipeIngredients([]);
-            setSteps([{ step_number: 1, instruction: '' }]);
+            setSteps([{ step_number: 1, instruction: '', image_url: '' }]);
         }
     }, [isOpen, initialRecipe, products, ingredientsList]);
 
@@ -234,7 +222,7 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
     };
 
     const handleAddStep = () => {
-        setSteps([...steps, { step_number: steps.length + 1, instruction: '' }]);
+        setSteps([...steps, { step_number: steps.length + 1, instruction: '', image_url: '' }]);
     };
 
     const handleRemoveStep = (index: number) => {
@@ -247,37 +235,25 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
         setSteps(newSteps);
     };
 
+    const moveStep = (index: number, direction: -1 | 1) => {
+        const newIndex = index + direction;
+        if (newIndex < 0 || newIndex >= steps.length) return;
+        const newSteps = [...steps];
+        const [moved] = newSteps.splice(index, 1);
+        newSteps.splice(newIndex, 0, moved);
+        newSteps.forEach((s, idx) => s.step_number = idx + 1);
+        setSteps(newSteps);
+    };
+
     const handleStepChange = (index: number, value: string) => {
         const newSteps = [...steps];
         newSteps[index].instruction = value;
         setSteps(newSteps);
     };
 
-    const handleImageUpload = async (index: number, file: File) => {
-        try {
-            const base64 = await readFileAsDataURL(file);
-            const newSteps = [...steps];
-            newSteps[index] = {
-                ...newSteps[index],
-                new_image: base64,
-                image_url: base64, // Preview
-                image_deleted: false
-            };
-            setSteps(newSteps);
-        } catch (err) {
-            console.error("Failed to read image file", err);
-            alert("Failed to process image.");
-        }
-    };
-
-    const handleRemoveImage = (index: number) => {
+    const handleStepImageChange = (index: number, value: string) => {
         const newSteps = [...steps];
-        newSteps[index] = {
-            ...newSteps[index],
-            image_url: undefined,
-            new_image: undefined,
-            image_deleted: true
-        };
+        newSteps[index].image_url = value;
         setSteps(newSteps);
     };
 
@@ -334,12 +310,12 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
                         stepPayload.id = s.id;
                     }
 
-                    if (s.new_image) {
-                        stepPayload.image = s.new_image;
-                    } else if (s.image_deleted) {
-                        stepPayload.image = null;
+                    const img = (s.image_url || '').trim();
+                    if (img.length === 0) {
+                        stepPayload.image = null; // Explicitly clear when blank
+                    } else {
+                        stepPayload.image = img;
                     }
-                    // If neither, omit image field to keep existing
 
                     return stepPayload;
                 })
@@ -564,61 +540,79 @@ const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({ isOpen, onClose, 
                             </button>
                         </div>
                         <div className="space-y-4">
-                            {steps.map((step, idx) => (
-                                <div key={idx} className="flex gap-3">
-                                    <div className="flex-none pt-2">
-                                        <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm font-bold">
-                                            {step.step_number}
+                            {steps.map((step, idx) => {
+                                const hasPreview = Boolean((step.image_url || '').trim());
+                                return (
+                                    <div key={idx} className="flex gap-3">
+                                        <div className="flex-none pt-2 space-y-1">
+                                            <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm font-bold">
+                                                {step.step_number}
+                                            </div>
+                                            <div className="flex flex-col gap-1 text-xs text-gray-500">
+                                                <button
+                                                    type="button"
+                                                    className="hover:text-blue-600"
+                                                    onClick={() => moveStep(idx, -1)}
+                                                >
+                                                    ↑
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="hover:text-blue-600"
+                                                    onClick={() => moveStep(idx, 1)}
+                                                >
+                                                    ↓
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className="flex-1 flex flex-col gap-2">
-                                        <textarea
-                                            className="w-full border border-gray-300 rounded-md p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-                                            rows={2}
-                                            placeholder={`Step ${step.step_number} instructions...`}
-                                            value={step.instruction}
-                                            onChange={(e) => handleStepChange(idx, e.target.value)}
-                                        />
+                                        <div className="flex-1 flex flex-col gap-2">
+                                            <textarea
+                                                className="w-full border border-gray-300 rounded-md p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                                                rows={2}
+                                                placeholder={`Step ${step.step_number} instructions...`}
+                                                value={step.instruction}
+                                                onChange={(e) => handleStepChange(idx, e.target.value)}
+                                            />
 
-                                        {/* Image Upload for Step */}
-                                        <div className="flex items-center gap-2">
-                                            {step.image_url ? (
-                                                <div className="relative group w-20 h-20 bg-gray-100 rounded-md border overflow-hidden">
-                                                    <img src={step.image_url} alt="Step" className="w-full h-full object-cover" />
-                                                    <button
-                                                        onClick={() => handleRemoveImage(idx)}
-                                                        className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                                                        title="Remove Image"
-                                                    >
-                                                        <Trash2 className="w-5 h-5" />
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <label className="cursor-pointer flex items-center text-xs text-gray-500 hover:text-blue-600 bg-gray-50 px-3 py-2 rounded border border-dashed border-gray-300 hover:border-blue-400 transition-colors">
-                                                    <ImageIcon className="w-4 h-4 mr-1.5" />
-                                                    Add Image
-                                                    <input
-                                                        type="file"
-                                                        className="hidden"
-                                                        accept="image/*"
-                                                        onChange={(e) => {
-                                                            if (e.target.files && e.target.files[0]) {
-                                                                handleImageUpload(idx, e.target.files[0]);
-                                                            }
-                                                        }}
-                                                    />
+                                            <div className="flex flex-col gap-2">
+                                                <label className="text-xs font-medium text-gray-500 flex items-center gap-1">
+                                                    <ImageIcon className="w-4 h-4" />
+                                                    Image URL (optional)
                                                 </label>
-                                            )}
+                                                <div className="flex items-center gap-2">
+                                                    <input
+                                                        type="text"
+                                                        className="flex-1 border border-gray-300 rounded-md p-2 text-sm focus:ring-1 focus:ring-blue-500"
+                                                        placeholder="https://example.com/image.jpg"
+                                                        value={step.image_url || ''}
+                                                        onChange={(e) => handleStepImageChange(idx, e.target.value)}
+                                                    />
+                                                    {hasPreview && (
+                                                        <button
+                                                            type="button"
+                                                            className="text-xs text-gray-500 hover:text-red-600"
+                                                            onClick={() => handleStepImageChange(idx, '')}
+                                                        >
+                                                            Clear
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                {hasPreview && (
+                                                    <div className="w-24 h-24 rounded-md border bg-gray-50 overflow-hidden">
+                                                        <img src={step.image_url} alt="Step" className="w-full h-full object-cover" />
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
+                                        <button
+                                            onClick={() => handleRemoveStep(idx)}
+                                            className="flex-none pt-2 text-gray-400 hover:text-red-500 transition-colors"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
                                     </div>
-                                    <button
-                                        onClick={() => handleRemoveStep(idx)}
-                                        className="flex-none pt-2 text-gray-400 hover:text-red-500 transition-colors"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 </div>

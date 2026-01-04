@@ -10,12 +10,13 @@ import ItemsPage from './pages/Items';
 import RecipesPage from './pages/Recipes';
 import UnitConversionsPage from './pages/UnitConversions';
 import AnalyticsPage from './pages/Analytics';
+import AccountsPage from './pages/Accounts';
 import Login from './pages/Login';
 import Layout from './components/Layout';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Protected Route Component
-const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: string[] }> = ({ children, allowedRoles }) => {
+const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: string[]; superuserOnly?: boolean }> = ({ children, allowedRoles, superuserOnly }) => {
     const { isAuthenticated, loading, user } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
@@ -28,7 +29,11 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: strin
 
     if (loading) return <div className="p-8 text-center">Loading...</div>;
 
-    if (allowedRoles && user && !allowedRoles.includes(user.role)) {
+    if (superuserOnly && user && !user.is_superuser) {
+        return <div>Access Denied</div>;
+    }
+
+    if (allowedRoles && user && !allowedRoles.includes(user.role) && !user.is_superuser) {
         // Role mismatch redirect
         if (user.role === 'employee') return <EmployeeDashboard />;
         if (user.role === 'it') return <ITDashboard />;
@@ -118,6 +123,14 @@ const AppRoutes: React.FC = () => {
                 <ProtectedRoute allowedRoles={['admin', 'it']}>
                     <Layout>
                         <StocktakePage />
+                    </Layout>
+                </ProtectedRoute>
+            } />
+
+            <Route path="/accounts" element={
+                <ProtectedRoute superuserOnly>
+                    <Layout>
+                        <AccountsPage />
                     </Layout>
                 </ProtectedRoute>
             } />

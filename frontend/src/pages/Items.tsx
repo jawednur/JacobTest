@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { getItems, createItem, updateItem, getLocations, getExpiredItems, disposeExpiredItem } from '../services/api';
+import React, { useState, useEffect, useRef } from 'react';
+import { getItems, createItem, updateItem, getLocations, getExpiredItems, disposeExpiredItem, configureItemForStore, getStores } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 interface Item {
     id: number;
@@ -9,15 +10,21 @@ interface Item {
     shelf_life_days: number | null;
     par: number;
     default_location: number | null;
+    store: number | null;
+    store_name?: string | null;
+    is_global: boolean;
 }
 
 const ItemsPage: React.FC = () => {
+    const { user } = useAuth();
     const [items, setItems] = useState<Item[]>([]);
     const [locations, setLocations] = useState<any[]>([]);
+    const [stores, setStores] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<Item | null>(null);
     const [expiredItems, setExpiredItems] = useState<any[]>([]);
+    const isSuper = !!(user?.is_superuser || user?.role === 'it' || user?.is_staff);
 
     // Form State
     const [name, setName] = useState('');
@@ -27,12 +34,24 @@ const ItemsPage: React.FC = () => {
     const [shelfLifeDays, setShelfLifeDays] = useState<number>(1);
     const [par, setPar] = useState<number>(0);
     const [defaultLocation, setDefaultLocation] = useState<string>('');
+    const [isGlobal, setIsGlobal] = useState<boolean>(false);
+    const [scopeFilter, setScopeFilter] = useState<string>('all'); // all | global | store:{id}
+    const [scopeMenuOpen, setScopeMenuOpen] = useState<boolean>(false);
+    const scopeMenuRef = useRef<HTMLDivElement | null>(null);
 
     const fetchData = async () => {
         setLoading(true);
         try {
+            const params: any = {};
+            if (isSuper) {
+                if (scopeFilter === 'global') {
+                    params.scope = 'global';
+                } else if (scopeFilter.startsWith('store:')) {
+                    params.scope = scopeFilter;
+                }
+            }
             const [itemsData, locationsData, expiredData] = await Promise.all([
-                getItems(),
+                getItems(params),
                 getLocations(),
                 getExpiredItems()
             ]);
@@ -48,7 +67,34 @@ const ItemsPage: React.FC = () => {
 
     useEffect(() => {
         fetchData();
-    }, []);
+    }, [scopeFilter, isSuper]);
+
+    useEffect(() => {
+        const loadStores = async () => {
+            if (!isSuper) {
+                setStores([]);
+                return;
+            }
+            try {
+                const data = await getStores();
+                setStores(data);
+            } catch (e) {
+                console.error("Failed to load stores", e);
+            }
+        };
+        loadStores();
+    }, [isSuper]);
+
+    useEffect(() => {
+        if (!scopeMenuOpen) return;
+        const handleClickOutside = (e: MouseEvent) => {
+            if (scopeMenuRef.current && !scopeMenuRef.current.contains(e.target as Node)) {
+                setScopeMenuOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [scopeMenuOpen]);
 
     const openModal = (item?: Item) => {
         if (item) {
@@ -58,6 +104,7 @@ const ItemsPage: React.FC = () => {
             setBaseUnit(item.base_unit);
             setPar(item.par || 0);
             setDefaultLocation(item.default_location ? item.default_location.toString() : '');
+            setIsGlobal(item.is_global);
             if (item.shelf_life_days !== null) {
                 setTracksExpiration(true);
                 setShelfLifeDays(item.shelf_life_days);
@@ -74,6 +121,7 @@ const ItemsPage: React.FC = () => {
             setShelfLifeDays(1);
             setPar(0);
             setDefaultLocation('');
+            setIsGlobal(false);
         }
         setIsModalOpen(true);
     };
@@ -92,12 +140,20 @@ const ItemsPage: React.FC = () => {
             base_unit: baseUnit,
             shelf_life_days: tracksExpiration ? shelfLifeDays : null,
             par,
-            default_location: defaultLocation ? parseInt(defaultLocation) : null
+            default_location: defaultLocation ? parseInt(defaultLocation) : null,
+            is_global: isSuper ? isGlobal : false
         };
 
         try {
             if (editingItem) {
-                await updateItem(editingItem.id, payload);
+                if (editingItem.is_global && !isSuper) {
+                    await configureItemForStore(editingItem.id, {
+                        par,
+                        default_location: defaultLocation ? parseInt(defaultLocation) : null
+                    });
+                } else {
+                    await updateItem(editingItem.id, payload);
+                }
             } else {
                 await createItem(payload);
             }
@@ -126,15 +182,17 @@ const ItemsPage: React.FC = () => {
             <div className="max-w-6xl mx-auto">
                 <div className="flex justify-between items-center mb-6">
                     <h1 className="text-2xl font-bold text-gray-800">Items Management</h1>
-                    <button 
-                        onClick={() => openModal()}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center"
-                    >
-                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                        </svg>
-                        Add New Item
-                    </button>
+                    <div className="flex items-center space-x-3">
+                        <button 
+                            onClick={() => openModal()}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center"
+                        >
+                            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            Add New Item
+                        </button>
+                    </div>
                 </div>
 
                 {expiredItems.length > 0 && (
@@ -186,6 +244,63 @@ const ItemsPage: React.FC = () => {
                         <thead>
                             <tr className="bg-gray-100 text-gray-600 text-sm uppercase font-semibold">
                                 <th className="p-4 border-b">Name</th>
+                                <th className="p-4 border-b">
+                                    <div className="flex items-center space-x-2">
+                                        <span>Scope</span>
+                                        {isSuper && (
+                                            <div className="relative" ref={scopeMenuRef}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setScopeMenuOpen(prev => !prev)}
+                                                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-white border border-gray-200 rounded-lg shadow-sm hover:border-blue-300 hover:text-blue-700 transition-colors"
+                                                >
+                                                    {scopeFilter === 'all' && 'All'}
+                                                    {scopeFilter === 'global' && 'Global'}
+                                                    {scopeFilter.startsWith('store:') && (() => {
+                                                        const id = scopeFilter.split(':')[1];
+                                                        const store = stores.find((s: any) => String(s.id) === id);
+                                                        return store ? store.name : 'Store';
+                                                    })()}
+                                                    <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                                                    </svg>
+                                                </button>
+                                                {scopeMenuOpen && (
+                                                    <div className="absolute mt-1 right-0 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
+                                                        <ul className="py-1 text-sm text-gray-700">
+                                                            <li>
+                                                                <button
+                                                                    onClick={() => { setScopeFilter('all'); setScopeMenuOpen(false); }}
+                                                                    className={`w-full text-left px-3 py-2 hover:bg-gray-50 ${scopeFilter === 'all' ? 'bg-gray-100 font-semibold' : ''}`}
+                                                                >
+                                                                    All scopes
+                                                                </button>
+                                                            </li>
+                                                            <li>
+                                                                <button
+                                                                    onClick={() => { setScopeFilter('global'); setScopeMenuOpen(false); }}
+                                                                    className={`w-full text-left px-3 py-2 hover:bg-gray-50 ${scopeFilter === 'global' ? 'bg-gray-100 font-semibold' : ''}`}
+                                                                >
+                                                                    Global
+                                                                </button>
+                                                            </li>
+                                                            {stores.map((s: any) => (
+                                                                <li key={s.id}>
+                                                                    <button
+                                                                        onClick={() => { setScopeFilter(`store:${s.id}`); setScopeMenuOpen(false); }}
+                                                                        className={`w-full text-left px-3 py-2 hover:bg-gray-50 ${scopeFilter === `store:${s.id}` ? 'bg-gray-100 font-semibold' : ''}`}
+                                                                    >
+                                                                        {s.name}
+                                                                    </button>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </th>
                                 <th className="p-4 border-b">Type</th>
                                 <th className="p-4 border-b">Base Unit</th>
                                 <th className="p-4 border-b">Shelf Life</th>
@@ -202,6 +317,17 @@ const ItemsPage: React.FC = () => {
                                 items.map(item => (
                                     <tr key={item.id} className="hover:bg-gray-50">
                                         <td className="p-4 font-medium text-gray-900">{item.name}</td>
+                                        <td className="p-4">
+                                            {item.is_global ? (
+                                                <span className="inline-flex items-center px-2 py-1 rounded text-xs font-semibold bg-amber-100 text-amber-700">
+                                                    Global
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-700">
+                                                    {item.store_name || 'Store'}
+                                                </span>
+                                            )}
+                                        </td>
                                         <td className="p-4 capitalize">
                                             <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${item.type === 'product' ? 'bg-purple-100 text-purple-700' : 'bg-indigo-100 text-indigo-700'}`}>
                                                 {item.type}
@@ -245,6 +371,7 @@ const ItemsPage: React.FC = () => {
                                     onChange={e => setName(e.target.value)}
                                     className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                                     required
+                                    disabled={editingItem?.is_global && !isSuper}
                                 />
                             </div>
                             
@@ -255,6 +382,7 @@ const ItemsPage: React.FC = () => {
                                         value={type}
                                         onChange={e => setType(e.target.value as any)}
                                         className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                        disabled={editingItem?.is_global && !isSuper}
                                     >
                                         <option value="ingredient">Ingredient</option>
                                         <option value="product">Product</option>
@@ -269,9 +397,26 @@ const ItemsPage: React.FC = () => {
                                         placeholder="e.g. kg, box"
                                         className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                                         required
+                                        disabled={editingItem?.is_global && !isSuper}
                                     />
                                 </div>
                             </div>
+
+                            {isSuper && (
+                                <div className="flex items-center space-x-2">
+                                    <input
+                                        id="isGlobal"
+                                        type="checkbox"
+                                        checked={isGlobal}
+                                        onChange={e => setIsGlobal(e.target.checked)}
+                                        className="form-checkbox h-4 w-4 text-blue-600"
+                                        disabled={!!editingItem?.id} // don't change scope on edit
+                                    />
+                                    <label htmlFor="isGlobal" className="text-sm text-gray-700">
+                                        Make this a global item (available to all stores)
+                                    </label>
+                                </div>
+                            )}
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Default Storage Location</label>
@@ -313,6 +458,7 @@ const ItemsPage: React.FC = () => {
                                         checked={tracksExpiration}
                                         onChange={e => setTracksExpiration(e.target.checked)}
                                         className="form-checkbox h-4 w-4 text-blue-600"
+                                        disabled={editingItem?.is_global && !isSuper}
                                     />
                                     <span className="text-gray-900 font-medium">Tracks Expiration / Shelf Life</span>
                                 </label>
@@ -327,6 +473,7 @@ const ItemsPage: React.FC = () => {
                                             onChange={e => setShelfLifeDays(parseInt(e.target.value))}
                                             className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                                             required={tracksExpiration}
+                                            disabled={editingItem?.is_global && !isSuper}
                                         />
                                         <p className="text-xs text-gray-500 mt-1">
                                             Inventory created for this item will automatically expire after this many days.

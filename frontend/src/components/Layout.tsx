@@ -12,7 +12,8 @@ import {
     History,
     Menu,
     X,
-    BarChart2
+    BarChart2,
+    Users
 } from 'lucide-react';
 import logo from '../assets/toastique-icon.svg';
 
@@ -30,7 +31,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         navigate('/login');
     };
 
-    const isAdmin = user?.role === 'admin' || user?.role === 'it';
+    const isSuperuser = user?.is_superuser;
+    const isAdmin = isSuperuser || user?.role === 'admin' || user?.role === 'it';
 
     const navItems = [
         { 
@@ -38,6 +40,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             label: 'Dashboard', 
             icon: LayoutDashboard,
             allowed: true 
+        },
+        { 
+            path: '/accounts', 
+            label: 'Accounts', 
+            icon: Users,
+            allowed: isSuperuser 
         },
         { 
             path: '/analytics', 
